@@ -1,0 +1,133 @@
+"""
+Early Warning System — detects impending BESS depletion / bottleneck events.
+
+Logic:
+  - Simulate BESS SoC forward using forecast load & circuit capacity
+  - Alert if SoC will drop below threshold within lookahead_hours
+  - Alert if Net_Delta will exceed BESS dispatchable capacity
+
+Can be run standalone or imported by the API.
+"""
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+import numpy as np
+import yaml
+from dataclasses import dataclass
+from typing import List
+
+
+@dataclass
+class Warning:
+    level: str          # "CRITICAL" | "WARNING" | "INFO"
+    hour:  int          # hours from now when event occurs
+    message: str
+    soc_at_event: float
+
+
+def check_warnings(
+    load_forecast: np.ndarray,    # 24h ahead
+    circuit_forecast: np.ndarray, # 24h ahead
+    current_soc: float,           # 0–1
+    cfg: dict = None,
+    lookahead_hours: int = 6,
+) -> List[Warning]:
+    if cfg is None:
+        with open("config.yaml") as f:
+            cfg = yaml.safe_load(f)
+
+    bc  = cfg["bess"]
+    dc  = cfg["diesel"]
+    cap = bc["capacity_mwh"]
+    soc_min   = bc["soc_min"]
+    soc_warn  = soc_min + 0.10   # warn at 30%
+    opt_mw    = dc["optimal_output_mw"]
+
+    warnings = []
+    soc = current_soc
+
+    for h in range(min(lookahead_hours, len(load_forecast))):
+        delta = load_forecast[h] - circuit_forecast[h]
+
+        # Project SoC without diesel intervention
+        if delta > 0:
+            soc = max(soc_min, soc - delta / cap)
+        else:
+            soc = min(bc["soc_max"], soc + (-delta) / cap)
+
+        dispatchable_mwh = (soc - soc_min) * cap
+
+        # CRITICAL: BESS will be depleted and no diesel can cover
+        if soc <= soc_min and delta > opt_mw:
+            warnings.append(Warning(
+                level="CRITICAL", hour=h,
+                message=f"BESS depleted at h+{h} and deficit {delta:.1f} MW exceeds diesel capacity. Load shedding risk.",
+                soc_at_event=round(soc, 3),
+            ))
+
+        # CRITICAL: BESS will be depleted within lookahead
+        elif soc <= soc_min:
+            warnings.append(Warning(
+                level="CRITICAL", hour=h,
+                message=f"BESS will reach minimum SoC at h+{h}. Start diesel pre-emptively.",
+                soc_at_event=round(soc, 3),
+            ))
+
+        # WARNING: SoC approaching minimum
+        elif soc <= soc_warn:
+            warnings.append(Warning(
+                level="WARNING", hour=h,
+                message=f"BESS SoC at {soc*100:.1f}% at h+{h}. Consider starting diesel.",
+                soc_at_event=round(soc, 3),
+            ))
+
+        # WARNING: Bottleneck + high load with low BESS reserve
+        if circuit_forecast[h] < 5.0 and dispatchable_mwh < delta * 2:
+            warnings.append(Warning(
+                level="WARNING", hour=h,
+                message=f"Bottleneck at h+{h}: circuit={circuit_forecast[h]:.1f} MW, "
+                        f"BESS reserve={dispatchable_mwh:.1f} MWh covers only {dispatchable_mwh/max(delta,0.1):.1f}h.",
+                soc_at_event=round(soc, 3),
+            ))
+
+    # INFO: upcoming bottleneck window
+    bottleneck_hours = [h for h in range(len(circuit_forecast)) if circuit_forecast[h] < 5.0]
+    if bottleneck_hours:
+        first = bottleneck_hours[0]
+        warnings.append(Warning(
+            level="INFO", hour=first,
+            message=f"Bottleneck window detected at h+{first} "
+                    f"({len(bottleneck_hours)} hours, min={min(circuit_forecast[bottleneck_hours]):.1f} MW). "
+                    f"Charge BESS now if possible.",
+            soc_at_event=round(current_soc, 3),
+        ))
+
+    return warnings
+
+
+def format_warnings(warnings: List[Warning]) -> str:
+    if not warnings:
+        return "✅ No warnings — grid stable for next forecast window."
+    icons = {"CRITICAL": "🔴", "WARNING": "🟡", "INFO": "🔵"}
+    lines = []
+    for w in sorted(warnings, key=lambda x: (x.level != "CRITICAL", x.hour)):
+        lines.append(f"{icons[w.level]} [{w.level}] h+{w.hour:02d} | SoC={w.soc_at_event*100:.1f}% | {w.message}")
+    return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    import pandas as pd
+
+    test = pd.read_parquet("data/test.parquet")
+    # Simulate: use actual values as "forecast" for a bottleneck window
+    # Find first bottleneck day
+    circuit = test["Circuit_Cap_MW"].values
+    load    = test["Island_Load_MW"].values
+    bottleneck_idx = next((i for i in range(len(circuit)-24) if circuit[i] < 5), 0)
+
+    load_fc    = load[bottleneck_idx: bottleneck_idx + 24]
+    circuit_fc = circuit[bottleneck_idx: bottleneck_idx + 24]
+    current_soc = 0.45  # low SoC scenario
+
+    warnings = check_warnings(load_fc, circuit_fc, current_soc, lookahead_hours=6)
+    print(format_warnings(warnings))

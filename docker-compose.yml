@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data          # persist parquet files
+      - ./models:/app/models      # persist trained models
+      - ./results:/app/results    # persist evaluation reports
+    environment:
+      - KMP_DUPLICATE_LIB_OK=TRUE
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

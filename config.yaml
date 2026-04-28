@@ -1,0 +1,68 @@
+data:
+  start_date: "2025-01-01"
+  end_date: "2026-12-31"
+  output_path: "data/ko_tao_grid.parquet"
+  bottleneck_probability: 0.30
+  bottleneck_hours: [ 18, 19, 20, 21 ]
+  ac_coefficient: 0.35
+  ac_threshold_temp: 28.0
+  high_season_months: [ 4, 5, 6, 7, 8, 9, 10 ]
+  high_season_load_shift: 1.5
+  load_base_min: 5.0
+  load_base_max: 10.0
+  circuit_cap_max: 16.0
+
+bess:
+  capacity_mwh: 50
+  soc_min: 0.20
+  soc_max: 0.80
+  charge_rate_mw: 8.0
+  degradation_per_500_cycles: 0.125
+  high_temp_threshold: 45.0
+  high_temp_degradation: 0.20
+
+diesel:
+  rated_mw: 10.0
+  optimal_load_factor: 0.75
+  optimal_output_mw: 7.5
+  bsfc_curve:
+    0.10: 350.0
+    0.25: 285.5
+    0.50: 225.0
+    0.75: 198.5
+    0.90: 205.2
+    1.00: 210.0
+
+model:
+  lgbm:
+    n_estimators: 1000
+    learning_rate: 0.011
+    num_leaves: 228
+    lambda_l1: 8.7e-07
+    lambda_l2: 0.00027
+    min_child_samples: 20
+    early_stopping_rounds: 100
+  tcn:
+    layers: 4
+    filters: 128
+    kernel_size: 3
+    window_size: 168
+    forecast_horizon: 24
+    learning_rate: 0.0014
+    epochs: 50
+    batch_size: 64
+
+optimizer:
+  isca:
+    population: 30
+    max_iter: 200
+    elite_top_k: 5
+  diesel_price_per_kg: 0.85
+  carbon_price_per_kg: 0.05
+  bess_degradation_cost_per_cycle: 12.0
+
+targets:
+  mape: 2.65
+  r2: 0.97
+  mae: 0.25
+  fuel_savings: 0.22
