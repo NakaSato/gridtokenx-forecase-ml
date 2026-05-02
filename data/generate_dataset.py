@@ -42,18 +42,20 @@ def generate(cfg):
         0.0
     ).clip(0, 1050)
 
-    wind_speed = (4.0 + 2.0 * rng.standard_normal(n)).clip(0.5, 12.0)
-    cloud_cover = (40 + 20 * rng.standard_normal(n)).clip(0, 100)
     carbon_intensity = (600 + 150 * rng.standard_normal(n)).clip(400, 850)
     market_price = (70 + 25 * rng.standard_normal(n)).clip(35, 120)
     tourist_index = (0.6 + 0.3 * is_high + 0.05 * rng.standard_normal(n)).clip(0.2, 1.0)
 
-    # Island load
+    # Island load — AR(1) noise for temporal coherence
     base_load = 6.5 + is_high * dc["high_season_load_shift"]
     ac_load = np.maximum(0, (temp - dc["ac_threshold_temp"]) * dc["ac_coefficient"])
     diurnal = 1.5 * np.sin(np.pi * (hours - 8) / 14).clip(0, None)
-    noise = rng.normal(0, 0.15, n)
-    island_load = (base_load + ac_load + diurnal + noise).clip(
+    # AR(1) noise: phi=0.85 gives strong autocorrelation (realistic load)
+    ar_noise = np.zeros(n)
+    ar_noise[0] = rng.normal(0, 0.3)
+    for i in range(1, n):
+        ar_noise[i] = 0.85 * ar_noise[i-1] + rng.normal(0, 0.15)
+    island_load = (base_load + ac_load + diurnal + ar_noise).clip(
         dc["load_base_min"], dc["load_base_max"]
     )
 
@@ -77,22 +79,16 @@ def generate(cfg):
         else:
             soc[i] = max(bc["soc_min"], soc[i-1] + delta / cap)
 
-    net_delta = island_load - circuit_cap
-
     df = pd.DataFrame({
         "Timestamp": idx,
         "Island_Load_MW": island_load.round(3),
-        "Circuit_Cap_MW": circuit_cap.round(3),
         "Dry_Bulb_Temp": temp.round(2),
         "Rel_Humidity": humidity.round(1),
         "Solar_Irradiance": irradiance.round(1),
-        "Wind_Speed": wind_speed.round(2),
-        "Cloud_Cover": cloud_cover.round(1),
         "Carbon_Intensity": carbon_intensity.round(1),
         "Market_Price": market_price.round(2),
         "Tourist_Index": tourist_index.round(3),
         "BESS_SoC_Pct": (soc * 100).round(1),
-        "Net_Delta_MW": net_delta.round(3),
     })
     df.set_index("Timestamp", inplace=True)
     return df

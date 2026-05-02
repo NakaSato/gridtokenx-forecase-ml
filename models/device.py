@@ -5,8 +5,7 @@ import torch
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 def get_device() -> str:
+    # MPS has high overhead for small models/datasets; CPU is faster here
     if torch.cuda.is_available():
         return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
     return "cpu"

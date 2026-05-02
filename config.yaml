@@ -1,6 +1,6 @@
 data:
   start_date: "2025-01-01"
-  end_date: "2026-12-31"
+  end_date: "2029-12-31"
   output_path: "data/ko_tao_grid.parquet"
   bottleneck_probability: 0.30
   bottleneck_hours: [ 18, 19, 20, 21 ]
@@ -46,11 +46,12 @@ model:
     layers: 4
     filters: 128
     kernel_size: 3
-    window_size: 168
+    window_size: 48
     forecast_horizon: 24
-    learning_rate: 0.0014
-    epochs: 50
+    learning_rate: 0.001
+    epochs: 30
     batch_size: 64
+    dropout: 0.2
 
 optimizer:
   isca:
@@ -60,6 +61,23 @@ optimizer:
   diesel_price_per_kg: 0.85
   carbon_price_per_kg: 0.05
   bess_degradation_cost_per_cycle: 12.0
+
+spatial_fidelity:
+  spotlight_radius_km: 57.9
+  primary_source: "Khanom Power Station (970 MW)"
+  bottleneck_assets:
+    - "HVDC Koh Samui Connector (115 kV)"
+    - "Koh Samui Export (115 kV)"
+  critical_nodes:
+    - name: "Samui 3 Substation"
+      coords: [100.02, 9.44]
+
+cluster:
+  islands: ["Ko Tao", "Ko Phangan", "Ko Samui"]
+  admm:
+    max_iter: 50
+    rho: 0.1
+    tolerance: 0.001
 
 targets:
   mape: 2.65

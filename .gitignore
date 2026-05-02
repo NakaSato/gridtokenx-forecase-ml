@@ -1,10 +1,71 @@
-# Python-generated files
+# Python
 __pycache__/
 *.py[oc]
+*.egg-info
 build/
 dist/
 wheels/
-*.egg-info
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
 
-# Virtual environments
-.venv
+# ML artifacts (Recursive)
+**/*.pkl
+**/*.pt
+**/*.parquet
+**/*.h5
+**/*.joblib
+!data/raw_tourism_samui.csv
+
+# Results (generated, not source)
+results/*.json
+results/*.png
+results/*.csv
+results/*.md
+!results/README.md
+
+# Secrets & env
+.env
+.env.*
+!.env.example
+frontend/.env.local
+
+# IDEs
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# MLflow
+mlflow.db
+mlruns/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/*_executed.ipynb
+
+# Node / Next.js
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/bun.lock
+frontend/tsconfig.tsbuildinfo
+frontend/frontend.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Misc
+*.log
+# uv.lock  # Committed by convention for apps, uncomment if this is a library

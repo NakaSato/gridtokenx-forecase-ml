@@ -15,10 +15,18 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import yaml
+import mlflow
 from models.device import get_device
 
-SEQ_FEATURES = ["Island_Load_MW", "BESS_SoC_Pct", "Net_Delta_MW",
-                 "Load_Lag_1h", "Load_Lag_24h"]
+mlflow.set_experiment("GridTokenX_TCN")
+
+SEQ_FEATURES = [
+    "Island_Load_MW",
+    "Load_Lag_1h", "Load_Lag_24h",
+    "BESS_SoC_Pct",
+    "Dry_Bulb_Temp", "Heat_Index", "Rel_Humidity",
+    "Hour_of_Day", "Is_High_Season",
+]
 
 def mape(y_true, y_pred):
     return np.mean(np.abs((y_true - y_pred) / (y_true + 1e-8))) * 100
@@ -37,7 +45,7 @@ class CausalConv1d(nn.Module):
 
 
 class TCNBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, kernel_size, dilation):
+    def __init__(self, in_ch, out_ch, kernel_size, dilation, dropout=0.2):
         super().__init__()
         self.net = nn.Sequential(
             CausalConv1d(in_ch, out_ch, kernel_size, dilation),
@@ -54,12 +62,12 @@ class TCNBlock(nn.Module):
 
 
 class TCN(nn.Module):
-    def __init__(self, in_features, filters, kernel_size, n_layers, horizon):
+    def __init__(self, in_features, filters, kernel_size, n_layers, horizon, dropout=0.2):
         super().__init__()
         layers = []
         for i in range(n_layers):
             in_ch = in_features if i == 0 else filters
-            layers.append(TCNBlock(in_ch, filters, kernel_size, dilation=2**i))
+            layers.append(TCNBlock(in_ch, filters, kernel_size, dilation=2**i, dropout=dropout))
         self.tcn = nn.Sequential(*layers)
         self.fc  = nn.Linear(filters, horizon)
 
@@ -91,6 +99,17 @@ def main():
     with open("config.yaml") as f:
         cfg = yaml.safe_load(f)
     tc = cfg["model"]["tcn"]
+    
+    # Override with best hyperparams if available
+    best_path = "results/best_hyperparams.yaml"
+    if os.path.exists(best_path):
+        with open(best_path) as f:
+            best = yaml.safe_load(f)
+            print(f"Loading best hyperparameters from {best_path}...")
+            if "tcn_filters" in best: tc["filters"] = best["tcn_filters"]
+            if "tcn_kernel" in best: tc["kernel_size"] = best["tcn_kernel"]
+            if "tcn_lr" in best: tc["learning_rate"] = best["tcn_lr"]
+
     window, horizon = tc["window_size"], tc["forecast_horizon"]
 
     train_df = pd.read_parquet("data/train.parquet")
@@ -103,35 +122,59 @@ def main():
 
     device = get_device()
     print(f"Using device: {device}")
+    dropout = tc.get("dropout", 0.2)
     model = TCN(len(SEQ_FEATURES), tc["filters"], tc["kernel_size"],
-                tc["layers"], horizon).to(device)
+                tc["layers"], horizon, dropout=dropout).to(device)
+    
+    # Skip transfer learning — architecture changed (dropout/batchnorm added)
     opt   = torch.optim.Adam(model.parameters(), lr=tc["learning_rate"])
     loss_fn = nn.MSELoss()
 
     best_val, best_state = float("inf"), None
-    for epoch in range(1, tc["epochs"] + 1):
-        model.train()
-        for xb, yb in train_dl:
-            xb, yb = xb.to(device), yb.to(device)
-            opt.zero_grad()
-            loss_fn(model(xb), yb).backward()
-            opt.step()
+    with mlflow.start_run(run_name="tcn_train"):
+        mlflow.log_params({
+            "filters": tc["filters"],
+            "kernel_size": tc["kernel_size"],
+            "layers": tc["layers"],
+            "learning_rate": tc["learning_rate"],
+            "epochs": tc["epochs"],
+            "batch_size": tc["batch_size"],
+            "window_size": window,
+            "forecast_horizon": horizon,
+            "dropout": dropout,
+        })
 
-        model.eval()
-        preds, trues = [], []
-        with torch.no_grad():
-            for xb, yb in val_dl:
-                preds.append(model(xb.to(device)).cpu().numpy())
-                trues.append(yb.numpy())
-        preds = np.concatenate(preds).flatten()
-        trues = np.concatenate(trues).flatten()
-        val_mape = mape(trues, preds)
+        for epoch in range(1, tc["epochs"] + 1):
+            model.train()
+            train_loss = 0
+            for xb, yb in train_dl:
+                xb, yb = xb.to(device), yb.to(device)
+                opt.zero_grad()
+                loss = loss_fn(model(xb), yb)
+                loss.backward()
+                opt.step()
+                train_loss += loss.item()
 
-        if val_mape < best_val:
-            best_val, best_state = val_mape, {k: v.clone() for k, v in model.state_dict().items()}
+            model.eval()
+            preds, trues = [], []
+            with torch.no_grad():
+                for xb, yb in val_dl:
+                    preds.append(model(xb.to(device)).cpu().numpy())
+                    trues.append(yb.numpy())
+            preds = np.concatenate(preds).flatten()
+            trues = np.concatenate(trues).flatten()
+            val_mape = mape(trues, preds)
 
-        if epoch % 10 == 0:
-            print(f"Epoch {epoch:3d} | Val MAPE: {val_mape:.4f}%")
+            mlflow.log_metric("val_mape", val_mape, step=epoch)
+            mlflow.log_metric("train_loss", train_loss / len(train_dl), step=epoch)
+
+            if val_mape < best_val:
+                best_val, best_state = val_mape, {k: v.clone() for k, v in model.state_dict().items()}
+
+            if epoch % 5 == 0:
+                print(f"Epoch {epoch:3d} | Train Loss: {train_loss/len(train_dl):.6f} | Val MAPE: {val_mape:.4f}%")
+
+        mlflow.log_metric("best_val_mape", best_val)
 
     model.load_state_dict(best_state)
     print(f"\nBest Val MAPE: {best_val:.4f}%  (target <2.65%)")
@@ -139,7 +182,8 @@ def main():
     os.makedirs("models", exist_ok=True)
     torch.save({"state_dict": best_state,
                 "config": tc,
-                "in_features": len(SEQ_FEATURES)}, "models/tcn.pt")
+                "in_features": len(SEQ_FEATURES),
+                "dropout": dropout}, "models/tcn.pt")
     print("Saved → models/tcn.pt")
 
 if __name__ == "__main__":

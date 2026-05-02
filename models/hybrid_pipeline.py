@@ -7,8 +7,12 @@ import os, sys, pickle, subprocess, tempfile
 import numpy as np
 import pandas as pd
 import yaml
+import mlflow
+import mlflow.sklearn
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, r2_score
+
+mlflow.set_experiment("GridTokenX_Hybrid")
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, ROOT)
@@ -45,9 +49,10 @@ def get_tcn_preds(ckpt, df, device):
     from torch.utils.data import DataLoader
     from models.tcn_model import TCN, WindowDataset
     tc = ckpt["config"]
+    dropout = ckpt.get("dropout", 0.0)
     window, horizon = tc["window_size"], tc["forecast_horizon"]
     net = TCN(ckpt["in_features"], tc["filters"], tc["kernel_size"],
-              tc["layers"], horizon).to(device)
+              tc["layers"], horizon, dropout=dropout).to(device)
     net.load_state_dict(ckpt["state_dict"])
     net.eval()
     ds = WindowDataset(df, window, horizon)
@@ -108,9 +113,40 @@ def main():
     meta.fit(X_val, y_val)
     preds = meta.predict(X_test)
 
-    print(f"\nTest MAPE : {mape(y_test, preds):.4f}%  (target <2.65%)")
-    print(f"Test MAE  : {mean_absolute_error(y_test, preds):.4f} MW  (target <0.25)")
-    print(f"Test R²   : {r2_score(y_test, preds):.4f}  (target >0.97)")
+    test_mape = mape(y_test, preds)
+    test_mae  = mean_absolute_error(y_test, preds)
+    test_r2   = r2_score(y_test, preds)
+
+    print(f"\nTest MAPE : {test_mape:.4f}%  (target <2.65%)")
+    print(f"Test MAE  : {test_mae:.4f} MW  (target <0.25)")
+    print(f"Test R²   : {test_r2:.4f}  (target >0.97)")
+
+    # ── Walk-forward 24h backtest (PEA requirement) ───────────────────────────
+    print("\n── Walk-forward 24h Backtest ──")
+    wf_mapes = []
+    step = 24
+    for start in range(0, len(y_test) - step, step):
+        yt = y_test[start:start + step]
+        yp = preds[start:start + step]
+        if len(yt) == step:
+            wf_mapes.append(mape(yt, yp))
+    backtest_mape = float(np.mean(wf_mapes))
+    print(f"Walk-forward MAPE (24h windows): {backtest_mape:.4f}%  (PEA target ≤10%)")
+    print(f"Windows evaluated: {len(wf_mapes)}")
+    print(f"PASS: {backtest_mape <= 10.0}")
+
+    with mlflow.start_run(run_name="hybrid_train"):
+        mlflow.log_params({"meta_alpha": 1.0})
+        mlflow.log_metrics({
+            "test_mape": test_mape,
+            "test_mae": test_mae,
+            "test_r2": test_r2,
+            "backtest_mape_24h": backtest_mape,
+        })
+        from mlflow.models import infer_signature
+        signature = infer_signature(X_test, preds)
+        input_example = pd.DataFrame(X_test[:5], columns=["lgbm_pred", "tcn_pred"])
+        mlflow.sklearn.log_model(meta, "meta_learner", signature=signature, input_example=input_example)
 
     os.makedirs("models", exist_ok=True)
     with open("models/meta_learner.pkl", "wb") as f:
