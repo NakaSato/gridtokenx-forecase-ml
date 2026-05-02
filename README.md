@@ -71,8 +71,8 @@ graph TD
     end
 
     subgraph "Serving Phase (Production)"
-        API[api/serve.py <br/>FastAPI] --> |Load Models| REG
-        API --> |@mlflow.trace| TRK
+        API[api/serve.py <br/>FastAPI] --> |"Load Models"| REG
+        API --> |"@mlflow.trace"| TRK
     end
 ```
 
