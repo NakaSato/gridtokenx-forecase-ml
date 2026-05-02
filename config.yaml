@@ -52,10 +52,10 @@ data:
   market_price_max: 120.0
 
 bess:
-  capacity_mwh: 50
+  capacity_mwh: 0  # KO TAO HAS NO BESS
   soc_min: 0.20
   soc_max: 0.80
-  charge_rate_mw: 8.0
+  charge_rate_mw: 0.0
   degradation_per_500_cycles: 0.125
   high_temp_threshold: 45.0
   high_temp_degradation: 0.20

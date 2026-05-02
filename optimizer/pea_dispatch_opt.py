@@ -129,7 +129,10 @@ def _build_milp(load: np.ndarray, circuit: np.ndarray,
     # ── Objective ────────────────────────────────────────────────────────────
     sfc_opt     = _bsfc_interp(0.75, curve)
     c_per_mw    = (sfc_opt / 1000.0) * (d_price + 2.68 * c_price) / sph
-    deg_per_mwh = deg_cost / (cap * (bc["soc_max"] - bc["soc_min"]))
+    
+    # Handle zero BESS capacity
+    depth       = bc["soc_max"] - bc["soc_min"]
+    deg_per_mwh = deg_cost / (cap * depth) if cap > 0.01 else 1000.0
 
     c_obj = np.zeros(n)
     c_obj[T:2*T]   = c_per_mw       # diesel fuel+carbon cost (per step)

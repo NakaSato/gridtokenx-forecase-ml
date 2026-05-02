@@ -45,7 +45,7 @@ def run_dispatch(
     dt = 1.0 / sph
     curve = {float(k): v for k, v in dc["bsfc_curve"].items()}
 
-    cap_mwh   = bc["capacity_mwh"]
+    cap_mwh   = max(1e-6, bc["capacity_mwh"]) # Prevent zero division
     soc_min   = bc["soc_min"]
     soc_max   = bc["soc_max"]
     rated_mw  = dc["rated_mw"]

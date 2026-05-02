@@ -38,34 +38,36 @@ def run_analysis():
     failure_start = 72  # 18:00
     circuit_mw[failure_start:] = 0.0
     
+    cap = cfg["bess"]["capacity_mwh"]
     print("=" * 70)
     print(f"  N-1 CONTINGENCY ANALYSIS: CABLE FAILURE @ {target_date}")
     print(f"  Incident: Total Failure of 115 kV NO.3 starting 18:00")
-    print(f"  Local Resources: Diesel (10 MW) + BESS (50 MWh)")
+    print(f"  Local Resources: Diesel (10 MW) {'+ BESS (' + str(cap) + ' MWh)' if cap > 0 else '(No BESS)'}")
     print("=" * 70)
 
     # 3. Run Optimization
-    initial_soc = 0.65
+    initial_soc = 0.65 if cap > 0 else 0.0
     res = pea_optimize(load_mw, circuit_mw, initial_soc=initial_soc, cfg=cfg)
 
     # 4. Results
     print(f"\n  Survival Status: {'SUCCESS ✅' if res['diesel_hours'] <= 24 else 'FAILED ❌'}")
     print(f"  Max Load during Failure: {np.max(load_mw[failure_start:]):.2f} MW")
     print(f"  Local Diesel Usage: {res['diesel_hours']/4.0:.1f} hours")
-    print(f"  BESS Depletion: {initial_soc*100:.1f}% -> {res['bess_soc_final']*100:.1f}%")
-    
+
+    if cap > 0:
+        print(f"  BESS Depletion: {initial_soc*100:.1f}% -> {res['bess_soc_final']*100:.1f}%")
+
     print(f"\n  {'h':>5} {'load':>6} {'circ':>6} {'diesel':>7} {'bess':>7} {'SoC%':>6} {'Status':>8}")
     print("  " + "─" * 60)
-    
+
     for i, s in enumerate(res["schedule"]):
         # h:m format
         hour = i // 4
         minute = (i % 4) * 15
         ts = f"{hour:02d}:{minute:02d}"
-        
-        soc_pct = s.soc_mwh / cfg["bess"]["capacity_mwh"] * 100
+
+        soc_pct = (s.soc_mwh / cap * 100) if cap > 0 else 0.0
         status = "CRITICAL" if s.circuit_mw == 0 else "NORMAL"
-        
         if i >= failure_start - 4: # show a bit before failure
             print(f"  {ts:>5} {s.load_mw:>6.2f} {s.circuit_mw:>6.2f} "
                   f"{s.diesel_mw:>7.2f} {s.bess_mw:>+7.2f} {soc_pct:>6.1f} {status:>8}")
