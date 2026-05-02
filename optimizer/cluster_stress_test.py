@@ -97,7 +97,7 @@ def run_cluster_test():
             return d_mw, b_mw, imp
 
         d_tao, b_tao, i_tao = local_dispatch(l_tao, soc_tao, "Tao", cap_mwh=0)
-        d_phangan, b_phangan, i_phangan = local_dispatch(l_phangan, soc_phangan, "Phangan", cap_mwh=50)
+        d_phangan, b_phangan, i_phangan = local_dispatch(l_phangan, soc_phangan, "Phangan", cap_mwh=0)
         d_samui, b_samui, i_samui = local_dispatch(l_samui, soc_samui, "Samui", cap_mwh=50)
         
         # ── Step 2: Global Bottleneck Check (HVDC) ──
