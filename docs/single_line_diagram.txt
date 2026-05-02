@@ -30,8 +30,8 @@
   │  115 kV → 33 kV → 22 kV                                                 │
   │  Coords: 99.995°E, 9.707°N                                              │
   │                                                                         │
-  │  🏝  KO SAMUI LOAD                                                      │
-  │  Base: ~55 MW  |  Peak: ~95 MW  |  Events: Songkran, NYE, Weekend       │
+  │  🏝  KO SAMUI LOAD (UNOBSERVABLE)                                          │
+  │  Base: Unknown  |  Peak: Unknown  |  Events: Seasonal / Event Spikes     │
   │                                                                         │
   │  ┌─────────────────┐    ┌──────────────────────────────────────────┐   │
   │  │  BESS (Samui)   │    │  DIESEL BACKUP (EGAT + Mobile)           │   │
@@ -49,8 +49,8 @@
   │  115 kV → 33 kV → 22 kV                                                 │
   │  Coords: ~100.060°E, 9.740°N                                            │
   │                                                                         │
-  │  🏝  KO PHANGAN LOAD                                                    │
-  │  Base: ~18 MW  |  Peak: ~26 MW  |  Events: Full Moon Party (+2-5 MW)    │
+  │  🏝  KO PHANGAN LOAD (UNOBSERVABLE)                                        │
+  │  Base: Unknown  |  Peak: Unknown  |  Events: Full Moon Party Spikes      │
   │                                                                         │
   │  ┌─────────────────┐                                                    │
   │  │  AVR Stationed  │                                                    │
@@ -68,8 +68,8 @@
   │  33 kV → 22 kV                                                          │
   │  Coords: ~99.840°E, 10.095°N                                            │
   │                                                                         │
-  │  🏝  KO TAO LOAD  ← PRIMARY FORECAST TARGET                            │
-  │  Range: 5 – 10 MW  |  Base: ~6.7 MW  |  Profile: Nearly flat            │
+  │  🏝  KO TAO LOAD (PRIMARY OBSERVED TARGET)                                │
+  │  Base: Unknown  |  Range: Unknown |  Profile: Nearly flat                │
   │                                                                         │
   │  ┌─────────────────┐    ┌──────────────────────────────────────────┐   │
   │  │  AVR Stationed  │    │  DIESEL BACKUP                           │   │

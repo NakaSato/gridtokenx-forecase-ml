@@ -10,8 +10,9 @@ This codebase provides a high-fidelity environment for training and benchmarking
 
 ### 🚀 2026 Strategy Updates
 As of May 2026, the system has been recalibrated for the modern Ko Tao grid:
+- **Zero-Shot Forecasting:** Due to zero historical load data for all islands, the models are trained on high-fidelity synthetic physics proxies and use **Online Calibration** once telemetry begins.
 - **15-Minute Intervals:** High-resolution forecasting and dispatch ($4\times$ resolution).
-- **Post-Commissioning Physics:** Models trained on **Jan 2024 – Feb 2026** data, capturing the dynamics of the new 115 kV undersea cable.
+- **Post-Commissioning Physics:** Models trained on **Jan 2024 – Feb 2026** synthetic data, capturing the dynamics of the new 115 kV undersea cable.
 - **Resilience-First:** Verified survival during **N-1 Contingency** (total cable failure) and **Cluster Bottlenecks** via ADMM coordination.
 
 ## 📊 Performance Benchmarks (2026 Strategy)
@@ -171,7 +172,7 @@ PEA 115 kV/33 kV radial topology for the Ko Tao–Phangan–Samui cluster.
          │
   ┌──────┴──────────────────────────────────────────────────────────────────┐
   │  KO SAMUI SUBSTATION RING                                               │
-  │  Base: ~55 MW  |  Peak: ~95 MW  |  BESS 50 MWh / 8 MW                    │
+  │  Base: Unknown  |  Peak: Unknown  |  BESS 50 MWh / 8 MW                    │
   │  Diesel Backup (EGAT + Mobile) for N-1 stability                        │
   └──────┬──────┘
          │
@@ -179,7 +180,7 @@ PEA 115 kV/33 kV radial topology for the Ko Tao–Phangan–Samui cluster.
          │
   ┌──────┴──────────────────────────────────────────────────────────────────┐
   │  KO PHANGAN SUBSTATION                                                  │
-  │  Base: ~18 MW  |  Peak: ~26 MW  |  BESS 50 MWh / 8 MW                    │
+  │  Base: Unknown  |  Peak: Unknown  |  BESS 50 MWh / 8 MW                    │
   └──────┬──────┘
          │
          │ PHANGAN – TAO RADIAL LINK
@@ -187,7 +188,7 @@ PEA 115 kV/33 kV radial topology for the Ko Tao–Phangan–Samui cluster.
          │
   ┌──────┴──────────────────────────────────────────────────────────────────┐
   │  🏝  KO TAO LOAD  ← PRIMARY FORECAST TARGET                            │
-  │  Range: 5 – 10 MW  |  Base: ~6.7 MW  |  Profile: Nearly flat            │
+  │  Range: Unknown |  Base: Unknown  |  Profile: Nearly flat            │
   │  AVR Stationed for distal voltage regulation                            │
   │  Diesel 10 MW rated  |  No local BESS                                   │
   └─────────────────────────────────────────────────────────────────────────┘
