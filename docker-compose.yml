@@ -1,4 +1,19 @@
 services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.11.3
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/app/mlruns
+      - ./mlflow.db:/app/mlflow.db
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root /app/mlruns
+      --host 0.0.0.0
+      --port 5000
+    restart: unless-stopped
+
   api:
     build: .
     ports:
@@ -7,8 +22,13 @@ services:
       - ./data:/app/data
       - ./models:/app/models
       - ./results:/app/results
+      - ./mlruns:/app/mlruns
+      - ./mlflow.db:/app/mlflow.db
     environment:
       - KMP_DUPLICATE_LIB_OK=TRUE
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow
     restart: unless-stopped
 
   frontend:
@@ -19,6 +39,8 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://api:8000
+      - NEXT_PUBLIC_MLFLOW_URL=http://localhost:5000
     depends_on:
       - api
+      - mlflow
     restart: unless-stopped
