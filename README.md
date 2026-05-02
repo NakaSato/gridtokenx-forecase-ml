@@ -40,7 +40,10 @@ just stress-test
 # 3. Run Cluster-wide bottleneck test (ADMM coordination)
 just cluster-test
 
-# 4. Generate full commissioning report & dashboard
+# 4. Run Monte Carlo stochastic resilience test (N=500)
+just stochastic-test
+
+# 5. Generate full commissioning report & dashboard
 just report
 ```
 

@@ -18,10 +18,12 @@ dependencies = [
     "pandapower>=3.1.2",
     "pandas==2.2.2",
     "pyarrow==16.0.0",
+    "pypsa>=1.2.0",
     "pyyaml==6.0.1",
     "scikit-learn==1.4.2",
     "tables>=3.11.1",
     "torch==2.3.0",
+    "tqdm>=4.67.3",
     "uvicorn==0.29.0",
 ]
 

@@ -23,7 +23,6 @@ COPY data/      ./data/
 COPY results/   ./results/
 
 ENV KMP_DUPLICATE_LIB_OK=TRUE \
-    OMP_NUM_THREADS=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
@@ -32,5 +31,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
-# Run startup check then start API
-CMD python api/startup_check.py && python -m uvicorn api.serve:app --host 0.0.0.0 --port 8000
+CMD ["python", "-m", "uvicorn", "api.serve:app", "--host", "0.0.0.0", "--port", "8000"]

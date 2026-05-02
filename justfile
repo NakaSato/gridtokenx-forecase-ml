@@ -117,18 +117,30 @@ pea-backtest input="data/raw/pea_telemetry_raw.csv":
 
 # Run 12-month backtest (May 2025 - Apr 2026)
 backtest-12m:
-    PYTHONPATH=. {{python}} results/backtest_12m.py
+    PYTHONPATH=. {{python}} research/backtest_12m.py
 
 # Run N-1 contingency stress test (April 2026)
 stress-test:
-    {{python}} optimizer/contingency_analysis.py
+    PYTHONPATH=. {{python}} research/contingency_analysis.py
 
 # Run Cluster-wide ADMM bottleneck test
 cluster-test:
-    {{python}} optimizer/cluster_stress_test.py
+    PYTHONPATH=. {{python}} research/cluster_stress_test.py
+
+# Run Monte Carlo stochastic resilience test (N=500)
+stochastic-test n="500":
+    PYTHONPATH=. {{python}} research/monte_carlo_engine.py {{n}}
+
+# Run Optimal Power Flow (OPF) analysis
+opf-test:
+    PYTHONPATH=. {{python}} research/optimal_power_flow.py
+
+# Generate holistic diagnostic report
+diagnose:
+    PYTHONPATH=. {{python}} research/diagnose_grid.py
 
 # Generate commissioning report and dashboard
-report: backtest-12m stress-test cluster-test
+report: backtest-12m stress-test cluster-test stochastic-test opf-test
     {{python}} results/plot_2026_strategy.py
     @echo "✅ Commissioning report and dashboard ready in results/"
 
