@@ -64,10 +64,10 @@ def create_ko_tao_network(
     # The 'Excess Power 0-16 MW' link
     pp.create_line(net, b_phangan_33, b_tao_33, 40.0, "33kV_XLPE", name="Phangan-Tao 33kV Link")
 
-    # ── AVR at Ko Tao (Voltage Regulation) ───────────────────────────────────
-    # Modeled as a static generator (sgen) with a voltage control setpoint (vm_pu)
-    # This reflects an active Automatic Voltage Regulator (AVR) stationed at Ko Tao.
-    pp.create_sgen(net, b_tao_33, p_mw=0.0, q_mvar=0.0, name="Ko Tao AVR", vm_pu=1.0)
+    # ── AVRs (Voltage Regulation) ────────────────────────────────────────────
+    # Modeled as static generators with voltage control setpoints
+    pp.create_sgen(net, b_phangan_33, p_mw=0.0, q_mvar=0.0, name="Ko Phangan AVR", vm_pu=1.0)
+    pp.create_sgen(net, b_tao_33,     p_mw=0.0, q_mvar=0.0, name="Ko Tao AVR",     vm_pu=1.0)
 
     # ── Loads & Generation ────────────────────────────────────────────────────
     pp.create_load(net, b_samui_115, samui_load_mw, samui_load_mw*0.329, name="Samui Load")

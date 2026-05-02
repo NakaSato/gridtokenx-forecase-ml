@@ -52,7 +52,10 @@
   │  🏝  KO PHANGAN LOAD                                                    │
   │  Base: ~18 MW  |  Peak: ~26 MW  |  Events: Full Moon Party (+2-5 MW)    │
   │                                                                         │
-  │           ( No Local Generation or Storage Assets )                     │
+  │  ┌─────────────────┐                                                    │
+  │  │  AVR Stationed  │                                                    │
+  │  │  Voltage Reg.   │                                                    │
+  │  └─────────────────┘                                                    │
   └──────┬──────┘
 
          │
