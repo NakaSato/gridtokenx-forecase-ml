@@ -1,56 +1,56 @@
-# GridTokenX — Ko Tao Microgrid Predictive Intelligence
+# GridTokenX: Predictive Intelligence for Islanded Microgrids
 
-This project is a high-fidelity research and deployment environment for AI-driven predictive dispatch in islanded microgrids, specifically focused on the Ko Tao-Phangan-Samui cluster.
+GridTokenX is a research and deployment platform for high-fidelity microgrid forecasting and dispatch optimization, specifically tuned for the **Ko Tao-Phangan-Samui** island cluster in Thailand.
 
-## 🏗️ Architecture & Stack
+## 🎯 Project Overview
+The system solves two primary challenges: **bottleneck congestion** (at the mainland 115 kV link) and **diesel generation efficiency**. It utilizes a hybrid meta-learning architecture to achieve a target MAPE of < 10% (historically < 3% in synthetic benchmarks) for the Ko Tao load profile.
 
-The system utilizes a **Hybrid Meta-Learner** architecture to forecast island load and optimize dispatch:
-1.  **Sequential Layer (TCN):** Temporal Convolutional Network for capturing long-term temporal patterns.
-2.  **Tabular Layer (LightGBM):** Handles non-linear exogenous correlations (Temperature, Humidity, Tourist Index).
-3.  **Meta-Learner (Ridge):** Blends predictions to achieve high precision (Target: MAPE < 10%).
-4.  **Optimizer (ISCA/MILP):** Implements Improved Sine-Cosine Algorithm and MILP for proactive BESS/Diesel scheduling.
+### Core Architecture
+- **Forecasting:** Hybrid ensemble using **Temporal Convolutional Networks (TCN)** for sequence modeling and **LightGBM** for tabular weather/holiday correlations, blended by a **Ridge Meta-Learner**.
+- **Optimization:** MILP-based dispatch for Diesel/BESS (Battery Energy Storage System) coordination.
+- **Monitoring:** Integrated MLflow for experiment tracking and a FastAPI serving layer for real-time telemetry ingestion.
 
-**Technologies:**
-- **Backend:** Python 3.11, FastAPI, PyTorch, LightGBM, Optuna.
-- **Frontend:** Next.js (TypeScript), Tailwind CSS (though Vanilla CSS is preferred for new components), Mapbox.
-- **Infrastructure:** Docker, `just` (task runner), `uv` (package manager).
+## 🛠 Building and Running
 
-## 🚀 Key Commands
+### Prerequisites
+- Python 3.11+
+- `uv` for dependency management
+- `just` command runner
 
-The project uses `just` for task automation. Ensure `just` and `uv` are installed.
+### Key Commands
+The project uses `just` for most tasks. Run `just` to see all available recipes.
 
-### Setup & Data
-- `just setup`: Initialize Python virtual environment using `uv`.
-- `just generate`: Create synthetic 4-year research dataset.
-- `just preprocess`: Run feature engineering (lags, rolling stats, heat index).
+| Category | Command | Description |
+| :--- | :--- | :--- |
+| **Setup** | `just setup` | Install dependencies and sync virtual environment. |
+| **Pipeline** | `just train` | Run full pipeline: Preprocess → Train LGBM/TCN → Fit Meta-Learner. |
+| **Execution** | `just generate` | Generate synthetic 4-year research dataset. |
+| **Execution** | `just preprocess`| Run feature engineering (Heat Index, lags, seasonal indices). |
+| **Training** | `just hybrid` | Train/fine-tune the meta-learner. |
+| **Evaluation**| `just eval` | Benchmark forecast + dispatch vs PEA targets. |
+| **Serving** | `just api` | Start the FastAPI backend (port 8000). |
+| **Frontend** | `just frontend` | Start the Next.js dashboard (port 3000). |
+| **Strategy** | `just report` | Run full 2026 strategy commissioning tests and generate reports. |
 
-### Training & Evaluation
-- `just train`: Execute full training pipeline (LGBM -> TCN -> Hybrid).
-- `just eval`: Run comprehensive evaluation of forecast and dispatch logic.
-- `just tune`: Perform hyperparameter optimization using Optuna.
+## 🧪 Testing and Validation
+- **Unit Tests:** Run `just test` (executes `pytest tests/`).
+- **N-1 Contingency:** `just stress-test` simulates mainland cable failure survival.
+- **Backtesting:** `just backtest-12m` evaluates performance over a full seasonal cycle.
 
-### Serving & Simulation
-- `just api`: Start the FastAPI forecast server (Port 8000).
-- `just simulate`: Replay test data through the API for real-time performance tracking.
-- `just up`: Launch full stack (API + Frontend) via Docker Compose.
+## 📝 Development Conventions
 
-### Deployment & Onboarding
-- `just pea-onboard`: Calibrate models to real PEA SCADA telemetry.
+### Code Structure
+- `api/`: FastAPI serving logic and real-time streaming engine.
+- `data/`: Scripts for synthetic generation, preprocessing, and real data integration.
+- `models/`: Implementation of TCN, LightGBM, and the Hybrid Meta-Learner.
+- `optimizer/`: Dispatch optimization (MILP), tuning (Optuna), and early warning systems.
+- `research/`: Specialized analysis tools for grid stability and commissioning.
 
-## 📂 Project Structure
+### Key Practices
+- **MLflow Tracking:** All training runs should be logged to MLflow. The local UI can be started if needed (default port 5000).
+- **Subprocess Safety:** On macOS, LightGBM inference should be run in isolated subprocesses (see `models/hybrid_pipeline.py`) to avoid OpenMP conflicts with PyTorch.
+- **Config Management:** Use `config.yaml` for grid parameters (diesel ratings, BESS capacity) and training hyperparameters.
+- **Type Safety:** Use Pydantic schemas in `api/serve.py` for all telemetry and forecast requests.
 
-- `api/`: FastAPI service and real-time streaming simulation.
-- `data/`: Data generation, preprocessing, and PEA integration logic.
-    - `raw/`: External datasets and raw telemetry.
-    - `processed/`: Training splits, scalers, and generated datasets.
-- `models/`: Hybrid model implementations (LGBM, TCN, Meta-Learner).
-- `optimizer/`: Dispatch logic, Early Warning System, and ISCA/MILP solvers.
-- `frontend/`: Next.js dashboard for grid visualization and metrics.
-- `docs/`: Master goals, integration plans, and architectural research.
-
-## 🛠️ Development Conventions
-
-- **Workflow:** Always follow the **Research -> Strategy -> Execution** lifecycle.
-- **Task Runner:** Use `just` for all operations. Do not run python scripts directly if a recipe exists.
-- **Data Integrity:** Real-world PEA data integration is handled via `data/pea_onboard.py` for distribution shift calibration.
-- **Testing:** Verify changes using `just simulate` or `just eval` before deployment.
+## 🏝 Grid Topology Context
+The Ko Tao load (primary target) is connected radially from Ko Phangan via a 33 kV XLPE line. A critical bottleneck exists at the 115 kV mainland connector to Samui. Proactive diesel dispatch is required when Tao load exceeds available excess power during bottleneck periods.
