@@ -1,0 +1,136 @@
+
+╔══════════════════════════════════════════════════════════════════════════════════════╗
+║         KO TAO – PHANGAN – SAMUI CLUSTER  |  SINGLE LINE DIAGRAM                   ║
+║         GridTokenX Predictive Intelligence Layer  |  PEA 115 kV Network             ║
+╚══════════════════════════════════════════════════════════════════════════════════════╝
+
+  MAINLAND GRID (230 kV)
+  ══════════════════════
+         │
+  ┌──────┴──────────────────────────────────────────────────────────────────┐
+  │  KHANOM POWER STATION                                                   │
+  │  Gas Turbine Combined Cycle  |  970 MW  |  Khanom, Nakhon Si Thammarat │
+  │  Coords: 99.860°E, 9.235°N                                              │
+  └──────┬──────────────────────────────────────────────────────────────────┘
+         │ 230 kV  (ขนอม-สุราษฎร์ธานี / ขนอม-นครศรีธรรมราช)
+         │
+  ┌──────┴──────┐
+  │  KHANOM     │  ← Step-down transformer
+  │  SUBSTATION │     230 kV / 115 kV
+  │  (OSM)      │     Coords: 99.859°E, 9.234°N
+  └──────┬──────┘
+         │
+         │ 115 kV  HVDC KOH SAMUI CONNECTOR  (~23 km submarine cable)
+         │ ⚡ BOTTLENECK ASSET — 30–40% congestion probability 18:00–21:00
+         │
+  ┌──────┴──────────────────────────────────────────────────────────────────┐
+  │  SAMUI 3 SUBSTATION  (สถานีไฟฟ้าเกาะสมุย 3)                            │
+  │  115 kV  |  minor_distribution  |  Coords: 100.020°E, 9.441°N          │
+  └──────┬──────────────────────────────────────────────────────────────────┘
+         │
+         ├─────────────────────────────────────────────────────────────────┐
+         │                                                                 │
+         │ 115 kV  KOH SAMUI EXPORT  (~10 km)                             │
+         │                                                                 │
+  ┌──────┴──────────────────────────────────────────────────────────────────┐
+  │  KO SAMUI DISTRIBUTION SUBSTATION                                       │
+  │  115 kV → 22 kV  |  Coords: 99.995°E, 9.707°N                          │
+  └──────┬──────────────────────────────────────────────────────────────────┘
+         │
+         │  22 kV Distribution Feeders
+         │
+  ┌──────┴──────────────────────────────────────────────────────────────────┐
+  │  🏝  KO SAMUI LOAD                                                      │
+  │  Base: ~55 MW  |  Peak (high season): ~95 MW  |  Std dev: 7.5 MW       │
+  │  Profile: Strong diurnal  |  Hotel/Airport/Commercial dominant          │
+  │  Events: Songkran (Apr), NYE (Dec), weekend spikes                      │
+  │                                                                         │
+  │  ┌─────────────────┐    ┌──────────────────────────────────────────┐   │
+  │  │  BESS (Samui)   │    │  DIESEL BACKUP                           │   │
+  │  │  50 MWh / 8 MW  │    │  10 MW rated  |  opt. load factor 75%   │   │
+  │  │  SoC: 20–80%    │    │  BSFC: 198.5 g/kWh @ 75% load          │   │
+  │  └─────────────────┘    └──────────────────────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+         │  (separate 115 kV submarine cable, ~30 km north)
+         │
+  ┌──────┴──────────────────────────────────────────────────────────────────┐
+  │  KO PHANGAN SUBSTATION                                                  │
+  │  115 kV  |  Coords: ~100.060°E, 9.740°N (estimated)                    │
+  └──────┬──────────────────────────────────────────────────────────────────┘
+         │
+         │  22 kV Distribution Feeders
+         │
+  ┌──────┴──────────────────────────────────────────────────────────────────┐
+  │  🏝  KO PHANGAN LOAD                                                    │
+  │  Base: ~18 MW  |  Peak: ~26 MW  |  Std dev: 1.9 MW                     │
+  │  Profile: Moderate diurnal  |  Tourism + residential                    │
+  │  Events: Full Moon Party (~1×/month, 22:00–02:00 spike +2–5 MW)        │
+  │                                                                         │
+  │  ┌─────────────────┐    ┌──────────────────────────────────────────┐   │
+  │  │  BESS (Phangan) │    │  DIESEL BACKUP                           │   │
+  │  │  50 MWh / 8 MW  │    │  10 MW rated                             │   │
+  │  │  SoC: 20–80%    │    └──────────────────────────────────────────┘   │
+  │  └─────────────────┘                                                    │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+         │  (separate 115 kV submarine cable, ~40 km north)
+         │
+  ┌──────┴──────────────────────────────────────────────────────────────────┐
+  │  KO TAO SUBSTATION                                                      │
+  │  115 kV  |  Coords: ~99.840°E, 10.095°N (estimated)                    │
+  └──────┬──────────────────────────────────────────────────────────────────┘
+         │
+         │  22 kV Distribution Feeders
+         │
+  ┌──────┴──────────────────────────────────────────────────────────────────┐
+  │  🏝  KO TAO LOAD  ← PRIMARY FORECAST TARGET                            │
+  │  Base: ~6.7 MW  |  Peak: ~7.7 MW  |  Std dev: 0.22 MW  ← STABLE       │
+  │  Profile: Nearly flat diurnal  |  AC-dominated  |  Dive resort island  │
+  │  Seasonal swing: only ±0.15 MW                                          │
+  │                                                                         │
+  │  ┌─────────────────┐    ┌──────────────────────────────────────────┐   │
+  │  │  BESS (Ko Tao)  │    │  DIESEL BACKUP                           │   │
+  │  │  50 MWh / 8 MW  │    │  10 MW rated  |  opt. output 7.5 MW     │   │
+  │  │  SoC: 20–80%    │    │  BSFC: 198.5 g/kWh @ 75% load          │   │
+  │  └─────────────────┘    └──────────────────────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+
+══════════════════════════════════════════════════════════════════════════════════════
+  AI CONTROL LAYER  (GridTokenX)
+══════════════════════════════════════════════════════════════════════════════════════
+
+  SCADA/Sensors ──► POST /stream/telemetry (hourly)
+                         │
+                    ┌────┴────────────────────────────────────────────────────┐
+                    │  StreamingEngine  |  Buffer: 48h window                 │
+                    │  TCN (sequential) + LightGBM (tabular) + Ridge (blend)  │
+                    │  Forecast horizon: 24h  |  Target MAPE < 2.65%          │
+                    └────┬────────────────────────────────────────────────────┘
+                         │
+              ┌──────────┼──────────┐
+              ▼          ▼          ▼
+         Ko Tao      Phangan     Samui
+         Dispatch    Dispatch    Dispatch
+              │          │          │
+              └──────────┴──────────┘
+                         │
+                   ADMM Consensus
+                   (multi-island power sharing)
+                         │
+                   Early Warning
+                   (6h lookahead, bottleneck alert)
+
+
+══════════════════════════════════════════════════════════════════════════════════════
+  LEGEND
+══════════════════════════════════════════════════════════════════════════════════════
+  ═══  230 kV transmission (mainland)
+  ───  115 kV submarine cable (island connector)
+  ⚡   Bottleneck / congestion point
+  🏝   Island load bus
+  BESS Battery Energy Storage System
+  HVDC High Voltage Direct Current submarine cable
+  BSFC Brake Specific Fuel Consumption (g/kWh)
+  ADMM Alternating Direction Method of Multipliers (distributed optimization)

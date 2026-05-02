@@ -33,6 +33,12 @@ import numpy as np, pandas as pd
 from models.lgbm_model import FEATURES
 with open("models/lgbm.pkl","rb") as f: model = pickle.load(f)
 df = pd.read_parquet({repr(parquet_path)})
+
+# Handle missing cluster features in real data splits by filling with 0.0
+for col in FEATURES:
+    if col not in df.columns:
+        df[col] = 0.0
+
 np.save({repr(out)}, model.predict(df[FEATURES]))
 """
     r = subprocess.run([sys.executable, "-c", script],
@@ -96,12 +102,12 @@ def main():
         meta = pickle.load(f)
     ckpt = torch.load("models/tcn.pt", map_location=device)
 
-    test = pd.read_parquet("data/test.parquet")
+    test = pd.read_parquet("data/processed/test.parquet")
     y_true = test["Island_Load_MW"].values
 
     # ── Forecast ─────────────────────────────────────────────────────────────
     print("LightGBM predictions...")
-    lgbm_preds = lgbm_predict_subprocess("data/test.parquet")
+    lgbm_preds = lgbm_predict_subprocess("data/processed/test.parquet")
     print("TCN predictions...")
     tcn_preds  = get_tcn_preds(ckpt, test, device)
 
@@ -119,10 +125,14 @@ def main():
           f"MAE: {forecast_metrics['mae']} MW  R²: {forecast_metrics['r2']}")
 
     # ── Walk-forward 24h backtest (PEA requirement) ───────────────────────────
+    freq = cfg["data"].get("frequency", "h")
+    sph = 4 if freq == "15min" else 1
+    step_24h = 24 * sph
+
     wf_mapes = []
-    for start in range(0, len(y_eval) - 24, 24):
-        yt = y_eval[start:start + 24]
-        yp = hybrid_preds[start:start + 24]
+    for start in range(0, len(y_eval) - step_24h, step_24h):
+        yt = y_eval[start:start + step_24h]
+        yp = hybrid_preds[start:start + step_24h]
         wf_mapes.append(float(mape(yt, yp)))
     backtest_mape = round(float(np.mean(wf_mapes)), 4)
     backtest_pass = backtest_mape <= 10.0
@@ -132,9 +142,10 @@ def main():
     # Circuit_Cap_MW dropped in preprocessing — use config max as conservative fallback
     circuit = test["Circuit_Cap_MW"].values if "Circuit_Cap_MW" in test.columns \
               else np.full(len(test), cfg["data"]["circuit_cap_max"])
-    n_days  = len(y_eval) // 24
-    pred_load = hybrid_preds[:n_days * 24].reshape(n_days, 24)
-    pred_circ = circuit[mask][:n_days * 24].reshape(n_days, 24)
+    
+    n_days  = len(y_eval) // step_24h
+    pred_load = hybrid_preds[:n_days * step_24h].reshape(n_days, step_24h)
+    pred_circ = circuit[mask][:n_days * step_24h].reshape(n_days, step_24h)
 
     total_fuel = total_carbon = diesel_hours = bess_cycles = 0.0
     soc = 0.65

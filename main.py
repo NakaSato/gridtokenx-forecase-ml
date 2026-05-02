@@ -26,16 +26,16 @@ def main():
     run_step("Synthetic Data Generation", ".venv/bin/python data/generate_dataset.py")
     
     # Force use of synthetic data
-    if os.path.exists("data/ko_tao_grid_2023_locked.parquet"):
-        os.rename("data/ko_tao_grid_2023_locked.parquet", "data/ko_tao_grid_2023_locked.bak")
+    if os.path.exists("data/processed/ko_tao_grid_2023_locked.parquet"):
+        os.rename("data/processed/ko_tao_grid_2023_locked.parquet", "data/processed/ko_tao_grid_2023_locked.bak")
     
     run_step("Synthetic Preprocessing", ".venv/bin/python data/preprocess.py")
     run_step("Pre-training Base Models", ".venv/bin/python models/hybrid_pipeline.py")
 
     # --- STAGE 2: FINE-TUNING (Climate Nuance Specialization) ---
     print("\n--- [STAGE 2] FINE-TUNING ON REAL ERA5 GROUND-TRUTH ---")
-    if os.path.exists("data/ko_tao_grid_2023_locked.bak"):
-        os.rename("data/ko_tao_grid_2023_locked.bak", "data/ko_tao_grid_2023_locked.parquet")
+    if os.path.exists("data/processed/ko_tao_grid_2023_locked.bak"):
+        os.rename("data/processed/ko_tao_grid_2023_locked.bak", "data/processed/ko_tao_grid_2023_locked.parquet")
     else:
         run_step("Real Data Integration", ".venv/bin/python data/integrate_raw.py")
         

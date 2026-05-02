@@ -17,11 +17,8 @@ import os, sys
 # Add root to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from torch.utils.data import DataLoader
-import os, sys
-
-# Add root to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from models.tcn_model import TCN, WindowDataset
+from models.lgbm_model import FEATURES as exog_cols, TARGET as target_col
 
 import mlflow
 import mlflow.sklearn
@@ -29,11 +26,22 @@ import mlflow.sklearn
 # Set experiment name
 mlflow.set_experiment("GridTokenX_Hyperparameter_Optimization")
 
+# Load Data once
+train_df_all = pd.read_parquet("data/processed/train.parquet")
+val_df_all   = pd.read_parquet("data/processed/val.parquet")
+
 def objective(trial):
     with mlflow.start_run(nested=True):
-        # 1. Load Data
-        train_df = pd.read_parquet("data/train.parquet")
-        val_df   = pd.read_parquet("data/val.parquet")
+        # 1. Access Data
+        train_df = train_df_all.copy()
+        val_df   = val_df_all.copy()
+
+        # Handle missing cluster features in real data splits by filling with 0.0
+        for col in exog_cols:
+            if col not in train_df.columns:
+                train_df[col] = 0.0
+            if col not in val_df.columns:
+                val_df[col] = 0.0
         
         with open("config.yaml") as f:
             cfg = yaml.safe_load(f)
@@ -64,14 +72,12 @@ def objective(trial):
     start_time = time.time()
 
     # 3. Train LightGBM
-    exog_cols = [
-        "Dry_Bulb_Temp", "Rel_Humidity", "Solar_Irradiance", "Wind_Speed", "Cloud_Cover",
-        "Carbon_Intensity", "Market_Price", "Tourist_Index", "Circuit_Cap_MW",
-        "Hour_of_Day", "Day_of_Week", "Is_Weekend", "Is_High_Season", "Heat_Index"
-    ]
-    
-    lgbm = lgb.LGBMRegressor(**{k.replace("lgbm_", ""): v for k, v in lgbm_params.items() if k != "verbose"})
-    lgbm.fit(train_df[exog_cols], train_df["Island_Load_MW"])
+    lgbm = lgb.LGBMRegressor(
+        **{k.replace("lgbm_", ""): v for k, v in lgbm_params.items() if k != "verbose"},
+        n_jobs=1,
+        random_state=42
+    )
+    lgbm.fit(train_df[exog_cols], train_df[target_col])
     lgbm_preds = lgbm.predict(val_df[exog_cols])
 
     # 4. Train TCN
@@ -143,10 +149,10 @@ def run_optimization(n_trials=50):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n-trials", type=int, default=20)
+    parser.add_argument("--trials", type=int, default=20)
     args = parser.parse_args()
     
-    study = run_optimization(args.n_trials)
+    study = run_optimization(args.trials)
     # Save best params to a file or config
     best_trial = study.best_trials[0]
     with open("results/best_hyperparams.yaml", "w") as f:

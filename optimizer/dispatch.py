@@ -40,6 +40,9 @@ def run_dispatch(
     bc = cfg["bess"]
     dc = cfg["diesel"]
     oc = cfg["optimizer"]
+    freq = cfg["data"].get("frequency", "h")
+    sph = 4 if freq == "15min" else 1
+    dt = 1.0 / sph
     curve = {float(k): v for k, v in dc["bsfc_curve"].items()}
 
     cap_mwh   = bc["capacity_mwh"]
@@ -62,37 +65,40 @@ def run_dispatch(
         if delta <= 0:
             # Surplus: charge BESS
             charge = min(-delta, bc["charge_rate_mw"],
-                         (soc_max - soc) * cap_mwh)
+                         (soc_max - soc) * cap_mwh / dt)
             bess_mw = -charge
         elif delta <= opt_mw:
             # BESS covers deficit alone
-            discharge = min(delta, (soc - soc_min) * cap_mwh)
+            discharge = min(delta, bc["charge_rate_mw"], (soc - soc_min) * cap_mwh / dt)
             bess_mw = discharge
             if discharge < delta:
-                # BESS depleted — fire diesel for remainder
+                # BESS limited — fire diesel for remainder
                 remainder = delta - discharge
-                diesel_mw = min(opt_mw, max(remainder, 0))
+                diesel_mw = min(rated_mw, max(remainder, 0))
         else:
             # Large deficit: diesel at optimal + BESS for remainder
             diesel_mw = opt_mw
             net_after_diesel = delta - diesel_mw
             if net_after_diesel > 0:
-                discharge = min(net_after_diesel, (soc - soc_min) * cap_mwh)
+                discharge = min(net_after_diesel, bc["charge_rate_mw"], (soc - soc_min) * cap_mwh / dt)
                 bess_mw = discharge
+                if discharge < net_after_diesel:
+                    # Still deficit -> crank diesel to rated
+                    diesel_mw = min(rated_mw, diesel_mw + (net_after_diesel - discharge))
             else:
                 # Diesel overproduces → recharge BESS
                 excess = -net_after_diesel
                 charge = min(excess, bc["charge_rate_mw"],
-                             (soc_max - soc) * cap_mwh)
+                             (soc_max - soc) * cap_mwh / dt)
                 bess_mw = -charge
 
-        # Update SoC
-        soc = np.clip(soc - bess_mw / cap_mwh, soc_min, soc_max)
+        # Update SoC: delta energy = bess_mw * dt
+        soc = np.clip(soc - (bess_mw * dt) / cap_mwh, soc_min, soc_max)
 
-        # Fuel & carbon
+        # Fuel & carbon (scale by dt)
         lf = diesel_mw / rated_mw if diesel_mw > 0 else 0.0
         sfc = _bsfc(lf, curve) if lf > 0 else 0.0          # g/kWh
-        fuel_kg = sfc * diesel_mw / 1000.0                  # kg/h
+        fuel_kg = (sfc * diesel_mw / 1000.0) * dt           # kg per step
         co2_kg  = fuel_kg * 2.68                            # diesel CO2 factor
 
         schedule.append(HourlyDispatch(

@@ -7,114 +7,108 @@ def integrate():
     with open("config.yaml") as f:
         cfg = yaml.safe_load(f)
     
-    print("--- Starting Raw Data Integration ---")
+    dc = cfg["data"]
+    freq = dc.get("frequency", "h")
+    sph = 4 if freq == "15min" else 1
+
+    print(f"--- Starting Raw Data Integration ({freq}) ---")
     
     # 1. Process Weather (ERA5)
-    # Ko Tao approx: Lat 10.1, Lon 99.8
     print("Loading raw weather data...")
-    weather_df = pd.read_parquet("data/raw_weather_thailand.parquet")
-    
-    # Find closest coordinates in dataset
-    # Based on data check: Lat ~9.9-10.3, Lon ~98.0-100.0 contains relevant points
+    weather_df = pd.read_parquet("data/raw/raw_weather_thailand.parquet")
     weather_df = weather_df[
         (weather_df['latitude'] >= 9.9) & (weather_df['latitude'] <= 10.3) & 
         (weather_df['longitude'] >= 98.0) & (weather_df['longitude'] <= 100.0)
     ]
-    
-    # Group by datetime to get average across the island area
     weather_hourly = weather_df.groupby('datetime')['2m_temperatures_celcius'].mean().reset_index()
     weather_hourly.rename(columns={'datetime': 'Timestamp', '2m_temperatures_celcius': 'Dry_Bulb_Temp'}, inplace=True)
     weather_hourly['Timestamp'] = pd.to_datetime(weather_hourly['Timestamp'])
     weather_hourly.set_index('Timestamp', inplace=True)
-    
-    print(f"Extracted {len(weather_hourly)} weather hours. Range: {weather_hourly.index.min()} to {weather_hourly.index.max()}")
 
-    # 2. Process Tourism (USM Arrivals)
+    # 2. Process Tourism & Extend Timeline
     print("Loading raw tourism data...")
-    tourism_raw = pd.read_csv("data/raw_tourism_samui.csv")
+    tourism_raw = pd.read_csv("data/raw/raw_tourism_samui.csv")
+    # Extend timeline to May 2026
+    timeline_full = pd.date_range("2023-01-01", "2026-05-02 00:00:00", freq=freq)
+    tourism_final = pd.DataFrame(index=timeline_full)
     
-    # Create hourly timeline for 2023
-    timeline_2023 = pd.date_range("2023-01-01", "2023-12-31 23:00:00", freq="H")
-    tourism_hourly = pd.DataFrame(index=timeline_2023)
-    
-    # Map monthly passengers to a normalized 0.4 - 1.0 index
     max_pax = tourism_raw['Passengers'].max()
     min_pax = tourism_raw['Passengers'].min()
     tourism_raw['Index'] = 0.4 + 0.6 * (tourism_raw['Passengers'] - min_pax) / (max_pax - min_pax)
-    
-    # Join monthly index to hourly timeline
     month_map = tourism_raw[tourism_raw['Year'] == 2023].set_index('Month')['Index'].to_dict()
-    # Month names to numbers map
-    import calendar
-    month_to_num = {name: num for num, name in enumerate(calendar.month_name) if num}
     
-    tourism_hourly['Month'] = tourism_hourly.index.month_name()
-    tourism_hourly['Tourist_Index'] = tourism_hourly['Month'].map(month_map)
-    tourism_hourly.drop(columns=['Month'], inplace=True)
+    tourism_final['Month'] = tourism_final.index.month_name()
+    tourism_final['Tourist_Index'] = tourism_final['Month'].map(month_map)
+    tourism_final.drop(columns=['Month'], inplace=True)
 
-    # 3. Merge and Re-generate Grid Physics for 2023
+    # 3. Merge and Re-generate Grid Physics
     print("Merging datasets...")
-    # Align weather and tourism on 2023 timeline
-    master_2023 = tourism_hourly.join(weather_hourly, how='inner')
+    # Upsample weather and interpolate for gaps in 2024-2026
+    weather_final = weather_hourly.resample(freq).interpolate(method="linear")
+    weather_extended = weather_final.reindex(timeline_full).interpolate(method="linear")
     
-    # Fill any gaps
-    master_2023 = master_2023.interpolate(method='linear')
+    master_full = tourism_final.join(weather_extended, how='inner')
+    master_full = master_full.interpolate(method='linear')
     
-    # Apply Physics (Simulating 2023 based on real weather/tourism)
     rng = np.random.default_rng(42)
-    n = len(master_2023)
+    n = len(master_full)
     
-    # Base load with AR(1) noise for temporal coherence (phi=0.85)
-    hours_arr = master_2023.index.hour.to_numpy()
-    months_arr = master_2023.index.month.to_numpy()
-    is_high = np.isin(months_arr, cfg["data"]["high_season_months"]).astype(float)
-    temp_arr = master_2023['Dry_Bulb_Temp'].values
+    hours_arr = master_full.index.hour.to_numpy() + master_full.index.minute.to_numpy() / 60.0
+    months_arr = master_full.index.month.to_numpy()
+    is_high = np.isin(months_arr, dc["high_season_months"]).astype(float)
+    temp_arr = master_full['Dry_Bulb_Temp'].values
 
-    base_load = 6.5 + is_high * cfg["data"]["high_season_load_shift"]
-    ac_load = np.maximum(0, (temp_arr - cfg["data"]["ac_threshold_temp"]) * cfg["data"]["ac_coefficient"])
+    # Recalibrate physics for frequency
+    phi = 0.78 if freq == "15min" else 0.85
+    sigma = 0.12 if freq == "15min" else 0.15 
+    
+    base_load = 6.5 + is_high * dc["high_season_load_shift"]
+    ac_load = np.maximum(0, (temp_arr - dc["ac_threshold_temp"]) * dc["ac_coefficient"])
     diurnal = 1.5 * np.sin(np.pi * (hours_arr - 8) / 14).clip(0, None)
+    
     ar_noise = np.zeros(n)
     ar_noise[0] = rng.normal(0, 0.3)
     for i in range(1, n):
-        ar_noise[i] = 0.85 * ar_noise[i-1] + rng.normal(0, 0.15)
+        ar_noise[i] = phi * ar_noise[i-1] + rng.normal(0, sigma)
 
-    # A/C Load from real temp
-    ac_load = np.maximum(0, (master_2023['Dry_Bulb_Temp'] - cfg["data"]["ac_threshold_temp"]) * cfg["data"]["ac_coefficient"])
+    # ── Modern Grid Trends (EV + Solar) ──
+    years = master_full.index.year.to_numpy()
+    ev_factor = np.where(years >= 2024, 1.0 + (years - 2023) * 0.025, 1.0)
+    is_daytime = (master_full.index.hour >= 9) & (master_full.index.hour <= 16)
+    solar_factor = np.where((years >= 2024) & is_daytime, 1.0 - (years - 2023) * 0.015, 1.0)
 
     # Final Island Load
-    master_2023['Island_Load_MW'] = (base_load + ac_load + diurnal + ar_noise).clip(5, 10)
+    master_full['Island_Load_MW'] = (base_load + ac_load + diurnal + ar_noise) * ev_factor * solar_factor
+    master_full['Island_Load_MW'] = master_full['Island_Load_MW'].clip(5, 12)
     
-    # Circuit Cap (Stochastic bottlenecks)
+    # Circuit Cap
     circuit_cap = np.full(n, 8.0)
-    hours = master_2023.index.hour
-    bottleneck_events = (np.isin(hours, cfg["data"]["bottleneck_hours"])) & (rng.random(n) < 0.3)
+    bottleneck_events = (np.isin(master_full.index.hour, dc["bottleneck_hours"])) & (rng.random(n) < (0.3 / sph))
     circuit_cap[bottleneck_events] = rng.uniform(0.5, 4.9, bottleneck_events.sum())
-    master_2023['Circuit_Cap_MW'] = circuit_cap
+    master_full['Circuit_Cap_MW'] = circuit_cap
     
-    # Remaining features (Synthetic but anchored)
-    master_2023['Rel_Humidity'] = 75 + 10 * np.sin(np.pi * (hours - 6) / 12) + rng.normal(0, 2, n)
-    master_2023['Solar_Irradiance'] = np.maximum(0, 1000 * np.sin(np.pi * (hours - 6) / 12)) * (master_2023.index.month.isin([2,3,4,5]).astype(int) * 0.2 + 0.8)
+    # Remaining features
+    master_full['Rel_Humidity'] = 75 + 10 * np.sin(np.pi * (hours_arr - 6) / 12) + rng.normal(0, 2, n)
+    master_full['Solar_Irradiance'] = np.maximum(0, 1000 * np.sin(np.pi * (hours_arr - 6) / 12)) * (master_full.index.month.isin([2,3,4,5]).astype(int) * 0.2 + 0.8)
     
-    # Missing columns for model compatibility
-    master_2023['Wind_Speed'] = rng.uniform(2.0, 6.0, n)
-    master_2023['Cloud_Cover'] = rng.uniform(0, 100, n)
-    master_2023['Carbon_Intensity'] = rng.uniform(400, 700, n)
-    master_2023['Market_Price'] = rng.uniform(50, 100, n)
-    master_2023['BESS_SoC_Pct'] = 50.0 # Initial placeholder
+    master_full['Carbon_Intensity'] = rng.uniform(400, 700, n)
+    master_full['Market_Price'] = rng.uniform(50, 100, n)
+    master_full['BESS_SoC_Pct'] = 50.0 
     
-    master_2023['Net_Delta_MW'] = master_2023['Island_Load_MW'] - master_2023['Circuit_Cap_MW']
+    master_full['Hour_of_Day'] = master_full.index.hour
+    master_full['Day_of_Week'] = master_full.index.dayofweek
+    master_full['Is_High_Season'] = is_high
     
     # Cleanup and Save
-    master_2023.index.name = "Timestamp"
+    master_full.index.name = "Timestamp"
     
-    # Validation
     print("\n--- Timestamp Integrity Check ---")
-    print(f"Start: {master_2023.index.min()}")
-    print(f"End:   {master_2023.index.max()}")
-    print(f"Total Hours: {len(master_2023)}")
+    print(f"Start: {master_full.index.min()}")
+    print(f"End:   {master_full.index.max()}")
+    print(f"Total Steps: {len(master_full)}")
     
-    master_2023.to_parquet("data/ko_tao_grid_2023_locked.parquet")
-    print("\nCompleted: data/ko_tao_grid_2023_locked.parquet")
+    master_full.to_parquet("data/processed/ko_tao_grid_2023_locked.parquet")
+    print("\nCompleted: data/processed/ko_tao_grid_2023_locked.parquet")
 
 if __name__ == "__main__":
     integrate()

@@ -154,7 +154,7 @@ if __name__ == "__main__":
     print_kpi_summary(df)
 
     os.makedirs("data", exist_ok=True)
-    out = "data/kireip_proxy.parquet"
+    out = "data/raw/kireip_proxy.parquet"
     # Drop internal columns before saving
     df_save = df.drop(columns=[c for c in df.columns if c.startswith("_")])
     df_save.to_parquet(out)

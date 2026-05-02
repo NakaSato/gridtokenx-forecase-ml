@@ -1,7 +1,7 @@
 """
 Feature engineering, train/val/test split, and normalization.
-Input:  data/ko_tao_grid.parquet
-Output: data/train.parquet, data/val.parquet, data/test.parquet, data/scaler.pkl
+Input:  data/processed/island_grid.parquet
+Output: data/processed/train.parquet, data/processed/val.parquet, data/processed/test.parquet, data/processed/scaler.pkl
 """
 import os
 import pickle
@@ -16,144 +16,129 @@ def load_cfg():
 
 def engineer_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     dc = cfg["data"]
+    freq = dc.get("frequency", "h")
+    sph = 4 if freq == "15min" else 1
     d = df.copy()
 
+    # ── Stability Features ──
+    # Headroom = Capacity - Load (Predicting difference is more stable)
+    if "Circuit_Cap_MW" in d.columns:
+        d["Headroom_MW"] = d["Circuit_Cap_MW"] - d["Island_Load_MW"]
+    
+    # Historical Max Capacity as a feature
+    d["Max_Capacity_MW"] = d["Circuit_Cap_MW"].expanding().max()
+
+    # ── Temporal Features ──
     # Lag features
-    for lag in [1, 24, 168]:
-        d[f"Load_Lag_{lag}h"] = d["Island_Load_MW"].shift(lag)
+    for lag_h in [1, 24, 168]:
+        lag_steps = lag_h * sph
+        d[f"Load_Lag_{lag_h}h"] = d["Island_Load_MW"].shift(lag_steps)
 
     # Rolling stats
-    for w in [3, 6]:
-        d[f"Load_Roll_Mean_{w}h"] = d["Island_Load_MW"].shift(1).rolling(w).mean()
-        d[f"Load_Roll_Std_{w}h"]  = d["Island_Load_MW"].shift(1).rolling(w).std()
+    for w_h in [3, 6]:
+        w_steps = w_h * sph
+        d[f"Load_Roll_Mean_{w_h}h"] = d["Island_Load_MW"].shift(1).rolling(w_steps).mean()
+        d[f"Load_Roll_Std_{w_h}h"]  = d["Island_Load_MW"].shift(1).rolling(w_steps).std()
+
+    # Cluster features
+    for island in ["Phangan", "Samui"]:
+        col = f"{island}_Load_MW"
+        if col in d.columns:
+            d[f"{island}_Load_Lag_1h"] = d[col].shift(sph)
+            for w_h in [3, 6]:
+                w_steps = w_h * sph
+                d[f"{island}_Load_Roll_Mean_{w_h}h"] = d[col].shift(1).rolling(w_steps).mean()
 
     # Heat index
     d["Heat_Index"] = d["Dry_Bulb_Temp"] * d["Rel_Humidity"] / 100
     
-    # Weather Trends (Smoothing unexplained variance)
-    for w in [3, 6]:
-        d[f"Temp_Roll_Mean_{w}h"] = d["Dry_Bulb_Temp"].rolling(w).mean()
-        d[f"Humid_Roll_Mean_{w}h"] = d["Rel_Humidity"].rolling(w).mean()
+    # Weather Trends
+    for w_h in [3, 6]:
+        w_steps = w_h * sph
+        d[f"Temp_Roll_Mean_{w_h}h"] = d["Dry_Bulb_Temp"].rolling(w_steps).mean()
+        d[f"Humid_Roll_Mean_{w_h}h"] = d["Rel_Humidity"].rolling(w_steps).mean()
         
-    # Temperature Gradient (Is it getting hotter or colder?)
+    # Temperature Gradient
     d["Temp_Gradient"] = d["Dry_Bulb_Temp"].diff()
 
     # Time features
     d["Hour_of_Day"]   = d.index.hour
     d["Day_of_Week"]   = d.index.dayofweek
-    d["Is_Weekend"]    = (d["Day_of_Week"] >= 5).astype(int)
     d["Is_High_Season"] = d.index.month.isin(dc["high_season_months"]).astype(int)
 
-    # Tourist_Index fallback: if not present (production), derive from Is_High_Season
+    # ── Holiday Features ──
+    if "Is_Thai_Holiday" not in d.columns:
+        holiday_dates = []
+        for h in dc["holidays"].values():
+            holiday_dates.extend(h)
+        md = d.index.strftime("%m-%d")
+        d["Is_Thai_Holiday"] = np.isin(md, holiday_dates).astype(int)
+
+    # Tourist_Index fallback
     if "Tourist_Index" not in d.columns:
         d["Tourist_Index"] = d["Is_High_Season"] * 0.4 + 0.6
 
-    # Drop leaky and unavailable-at-inference features
-    drop_cols = ["Net_Delta_MW", "Circuit_Cap_MW", "Is_Weekend"]
-    d.drop(columns=[c for c in drop_cols if c in d.columns], inplace=True)
-
+    # Drop leaky/redundant features (Keep Circuit_Cap_MW for eval reference but not for features)
+    # Actually, we keep it for now as it's needed for Headroom calculation in future rows
     d.dropna(inplace=True)
     return d
-
-def split(df: pd.DataFrame):
-    n = len(df)
-    t1 = int(n * 0.70)
-    t2 = int(n * 0.85)
-    return df.iloc[:t1], df.iloc[t1:t2], df.iloc[t2:]
-
-
-def impute_bess_soc(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """Re-simulate BESS SoC if the column is constant (placeholder data)."""
-    bc = cfg["bess"]
-    if df["BESS_SoC_Pct"].std() < 0.1:
-        print("  BESS_SoC_Pct is constant — re-simulating from load/circuit balance.")
-        cap = bc["capacity_mwh"]
-        charge_rate = bc.get("charge_rate_mw", 8.0)
-        soc = np.zeros(len(df))
-        soc[0] = 0.65
-        load = df["Island_Load_MW"].values
-        circuit = df["Circuit_Cap_MW"].values
-        for i in range(1, len(df)):
-            delta = circuit[i] - load[i]
-            if delta > 0:
-                soc[i] = min(bc["soc_max"], soc[i - 1] + min(delta, charge_rate) / cap)
-            else:
-                soc[i] = max(bc["soc_min"], soc[i - 1] + delta / cap)
-        df = df.copy()
-        df["BESS_SoC_Pct"] = (soc * 100).round(1)
-    return df
 
 
 def main():
     cfg = load_cfg()
+    dc = cfg["data"]
 
-    locked_path   = "data/ko_tao_grid_2023_locked.parquet"
-    synthetic_path = cfg["data"]["output_path"]
+    path = dc["output_path"]
+    if not os.path.exists(path):
+        print(f"Dataset {path} not found. Run generate first.")
+        return
 
-    if os.path.exists(locked_path):
-        print(f"Using REAL dataset: {locked_path}")
-        df_real = pd.read_parquet(locked_path)
-        df_real = impute_bess_soc(df_real, cfg)   # Fix: re-simulate constant SoC
+    print(f"Loading dataset: {path}")
+    df = pd.read_parquet(path)
+    df = engineer_features(df, cfg)
 
-        # FIX: val/test come from real data only (chronological)
-        # FIX: synthetic used for training only, appended AFTER sorting by index
-        print(f"Augmenting training with synthetic: {synthetic_path}")
-        df_syn = pd.read_parquet(synthetic_path)
-        df_syn = impute_bess_soc(df_syn, cfg)
-        df_syn_fe = engineer_features(df_syn, cfg)
+    # ── 2026 Strategy Splitting ──
+    # Training:   Jan 2024 -> Feb 2026
+    # Validation: March 1 -> March 20, 2026
+    # Testing:    March 21 -> April 30, 2026
+    
+    train = df[df.index <= dc["train_end"]]
+    val   = df[(df.index >= dc["val_start"]) & (df.index <= dc["val_end"])]
+    test  = df[(df.index >= dc["test_start"]) & (df.index <= dc["test_end"])]
 
-        df_real_fe = engineer_features(df_real, cfg)
-        n_real = len(df_real_fe)
-        val_start  = int(n_real * 0.70)
-        test_start = int(n_real * 0.85)
-
-        train_real = df_real_fe.iloc[:val_start]
-        val        = df_real_fe.iloc[val_start:test_start]
-        test       = df_real_fe.iloc[test_start:]
-
-        # Use real data as primary, synthetic as light augmentation (20% weight via sampling)
-        n_syn_sample = min(len(df_syn_fe), int(len(train_real) * 0.2))
-        df_syn_sample = df_syn_fe.sample(n=n_syn_sample, random_state=42)
-        train = pd.concat([train_real, df_syn_sample]).sort_index()
-        df = df_syn_fe  # reference for column selection
-    else:
-        print(f"Using synthetic dataset: {synthetic_path}")
-        df = pd.read_parquet(synthetic_path)
-        df = impute_bess_soc(df, cfg)
-        df = engineer_features(df, cfg)
-        train, val, test = split(df)
-
-    train, val, test = train.copy(), val.copy(), test.copy()
     print(f"Train: {len(train):,} | Val: {len(val):,} | Test: {len(test):,}")
-    print(f"Train: {train.index[0]} → {train.index[-1]}")
-    print(f"Val:   {val.index[0]} → {val.index[-1]}")
-    print(f"Test:  {test.index[0]} → {test.index[-1]}")
+    print(f"Train Range: {train.index.min()} to {train.index.max()}")
+    print(f"Val Range:   {val.index.min()} to {val.index.max()}")
+    print(f"Test Range:  {test.index.min()} to {test.index.max()}")
 
-    # FIX: exclude lag/rolling load features from scaling — they must stay in MW
-    # scale so TCN sequential inputs are commensurate with the MW target
+    # Scaling
     exclude = {
-        "Island_Load_MW",
-        "Is_High_Season", "Hour_of_Day", "Day_of_Week",
+        "Island_Load_MW", "Headroom_MW",
+        "Is_High_Season", "Hour_of_Day", "Day_of_Week", "Is_Thai_Holiday", "Is_Songkran",
         "Load_Lag_1h", "Load_Lag_24h", "Load_Lag_168h",
         "Load_Roll_Mean_3h", "Load_Roll_Std_3h",
         "Load_Roll_Mean_6h", "Load_Roll_Std_6h",
     }
+    cluster_cols = {c for c in df.columns if c.startswith(("Phangan_", "Samui_"))}
+    exclude |= cluster_cols
+
+    common_cols = set(train.columns) & set(val.columns) & set(test.columns)
     num_cols = [c for c in df.select_dtypes(include=np.number).columns
-                if c not in exclude]
+                if c not in exclude and c in common_cols]
 
     scaler = StandardScaler()
     train.loc[:, num_cols] = scaler.fit_transform(train[num_cols])
     val.loc[:, num_cols]   = scaler.transform(val[num_cols])
     test.loc[:, num_cols]  = scaler.transform(test[num_cols])
 
-    os.makedirs("data", exist_ok=True)
-    train.to_parquet("data/train.parquet")
-    val.to_parquet("data/val.parquet")
-    test.to_parquet("data/test.parquet")
-    with open("data/scaler.pkl", "wb") as f:
+    os.makedirs("data/processed", exist_ok=True)
+    train.to_parquet("data/processed/train.parquet")
+    val.to_parquet("data/processed/val.parquet")
+    test.to_parquet("data/processed/test.parquet")
+    with open("data/processed/scaler.pkl", "wb") as f:
         pickle.dump(scaler, f)
 
-    print("Saved train/val/test parquets and data/scaler.pkl")
+    print("Saved train/val/test parquets and data/processed/scaler.pkl")
 
 
 if __name__ == "__main__":

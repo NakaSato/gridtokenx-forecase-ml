@@ -149,10 +149,10 @@ nano /opt/gridtokenx/edge.env
 just scada-ingest --dry-run
 
 # Step 3 — Collect 3 months of live data, then onboard
-just pea-onboard data/pea_telemetry_raw.csv 3
+just pea-onboard data/raw/pea_telemetry_raw.csv 3
 
 # Step 4 — Verify model performance on real data
-just pea-backtest data/pea_telemetry_raw.csv
+just pea-backtest data/raw/pea_telemetry_raw.csv
 
 # Step 5 — Go live
 just scada-ingest

@@ -1,7 +1,7 @@
 """
 PEA Dispatch Optimization — Test Runner
 
-Loads the hybrid forecast from data/test.parquet, runs the MILP optimizer
+Loads the hybrid forecast from data/processed/test.parquet, runs the MILP optimizer
 over the first 7 days (168 hours, 7 × 24h windows), and prints a full report.
 
 Usage:
@@ -28,14 +28,14 @@ def get_forecast(cfg, n_days=7, use_kireip=False):
     Load forecast data. use_kireip=True loads the KIREIP proxy dataset
     (real-world calibrated) instead of synthetic test.parquet.
     """
-    if use_kireip and os.path.exists("data/kireip_proxy.parquet"):
-        df = pd.read_parquet("data/kireip_proxy.parquet")
+    if use_kireip and os.path.exists("data/raw/kireip_proxy.parquet"):
+        df = pd.read_parquet("data/raw/kireip_proxy.parquet")
         n  = n_days * T
         load    = df["Island_Load_MW"].values[:n]
         circuit = df["Circuit_Cap_MW"].values[:n]
         print("  [Dataset] KIREIP proxy (real-world calibrated)")
     else:
-        df = pd.read_parquet("data/test.parquet")
+        df = pd.read_parquet("data/processed/test.parquet")
         n  = n_days * T
         load    = df["Island_Load_MW"].values[:n]
         cap_max = cfg["data"]["circuit_cap_max"]
@@ -104,7 +104,7 @@ def print_day_table(day: int, result: dict):
 def main():
     cfg = load_cfg()
     n_days = 7
-    use_kireip = os.path.exists("data/kireip_proxy.parquet")
+    use_kireip = os.path.exists("data/raw/kireip_proxy.parquet")
     load_all, circuit_all = get_forecast(cfg, n_days, use_kireip=use_kireip)
 
     print("=" * 70)

@@ -33,15 +33,15 @@ def run_commissioning_audit(data_path):
     df = map_pea_to_schema(df)
     
     # Save to staging for evaluation
-    df.to_parquet("data/pea_ground_truth.parquet")
+    df.to_parquet("data/processed/pea_ground_truth.parquet")
     
     # Run high-fidelity backtest
     # Note: evaluate_system will use the model trained on ERA5 weather
     # to predict these real-world records.
     print("Running system-wide evaluation...")
-    # results = evaluate_system(data_path="data/pea_ground_truth.parquet")
+    # results = evaluate_system(data_path="data/processed/pea_ground_truth.parquet")
     print("Audit Complete. See results/commissioning_report.json")
 
 if __name__ == "__main__":
     # Placeholder for the future dataset delivery
-    run_commissioning_audit("data/pea_telemetry_raw.csv")
+    run_commissioning_audit("data/raw/pea_telemetry_raw.csv")

@@ -73,4 +73,4 @@ def run_simulation(data_path, api_url="http://localhost:8000"):
         time.sleep(1) # Simulate real-time (1 second = 1 hour)
 
 if __name__ == "__main__":
-    run_simulation("data/ko_tao_grid_2023_locked.parquet")
+    run_simulation("data/processed/ko_tao_grid_2023_locked.parquet")

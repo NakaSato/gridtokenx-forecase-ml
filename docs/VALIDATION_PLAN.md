@@ -20,7 +20,7 @@ This document outlines the formal validation protocol to be executed once propri
 - **Telemetry Mapping:** Map PEA SCADA registers to the `TelemetryRow` schema.
 - **Clock Synchronization:** Align all time-series data to hourly intervals (UTC+7).
 - **Climate Verification:** Cross-reference PEA load spikes with ERA5-Land weather telemetry to finalize the Heat Index coefficients.
-- **Onboarding pipeline:** `just pea-onboard data/pea_telemetry_raw.csv 3` (ready, awaiting data)
+- **Onboarding pipeline:** `just pea-onboard data/raw/pea_telemetry_raw.csv 3` (ready, awaiting data)
 
 ## 🧪 Phase 2: Predictive Accuracy Audit ✅
 - **Backtest MAPE:** 1.20% (target < 2.65%) ✅
@@ -63,7 +63,7 @@ This document outlines the formal validation protocol to be executed once propri
 ---
 
 ## 🔄 When PEA SCADA Data Arrives
-1. `just pea-onboard data/pea_telemetry_raw.csv 3` — 3-month calibration
-2. `just pea-backtest data/pea_telemetry_raw.csv` — read-only audit
+1. `just pea-onboard data/raw/pea_telemetry_raw.csv 3` — 3-month calibration
+2. `just pea-backtest data/raw/pea_telemetry_raw.csv` — read-only audit
 3. Re-run Phase 2–3 with real data; update this document
 4. Replace KIREIP proxy with PEA actuals in `results/pea_optimization_report.json`

@@ -12,8 +12,8 @@ Steps:
   6. Backtest — walk-forward 24h MAPE on remaining PEA data
 
 Usage:
-    python data/pea_onboard.py --input data/pea_telemetry_raw.csv
-    python data/pea_onboard.py --input data/pea_telemetry_raw.csv --calib-months 3
+    python data/pea_onboard.py --input data/raw/pea_telemetry_raw.csv
+    python data/pea_onboard.py --input data/raw/pea_telemetry_raw.csv --calib-months 3
 """
 import argparse, os, sys, pickle, subprocess, tempfile
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -265,7 +265,7 @@ def backtest(backtest_scaled: pd.DataFrame, meta: Ridge) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="PEA data onboarding pipeline")
-    parser.add_argument("--input", default="data/pea_telemetry_raw.csv",
+    parser.add_argument("--input", default="data/raw/pea_telemetry_raw.csv",
                         help="Path to PEA CSV or Parquet file")
     parser.add_argument("--calib-months", type=int, default=3,
                         help="Months of data used for scaler+meta refit (rest = backtest)")
@@ -366,10 +366,10 @@ def main():
             pickle.dump(meta, f)
         print("  Saved → models/meta_learner.pkl  (backup: meta_learner_pretrain.pkl)")
 
-    scaler_path = os.path.join(ROOT, "data/scaler_pea.pkl")
+    scaler_path = os.path.join(ROOT, "data/processed/scaler_pea.pkl")
     with open(scaler_path, "wb") as f:
         pickle.dump(new_scaler, f)
-    print(f"  Saved → data/scaler_pea.pkl")
+    print(f"  Saved → data/processed/scaler_pea.pkl")
 
     import json
     report = {

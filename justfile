@@ -75,11 +75,13 @@ simulate rows="200":
 colab-train:
     tar -czf /tmp/gridtokenx.tar.gz \
         --exclude='.git' --exclude='.venv' --exclude='__pycache__' \
-        --exclude='data/raw_weather_thailand.parquet' \
+        --exclude='node_modules' --exclude='frontend' \
+        --exclude='data/raw' \
+        --exclude='mlruns' --exclude='mlflow_colab.db' \
         --exclude='models/*.pkl' --exclude='models/*.pt' .
     colab-cli file upload /tmp/gridtokenx.tar.gz /content/gridtokenx.tar.gz
     colab-cli server run bash -lc \
-        'mkdir -p /content/gridtokenx && tar -xzf /content/gridtokenx.tar.gz -C /content/gridtokenx && pip install -q lightgbm torch pandas numpy scikit-learn pyarrow pyyaml && cd /content/gridtokenx && python colab_train.py 2>&1 | tee /tmp/train.log'
+        'mkdir -p /content/gridtokenx && tar -xzf /content/gridtokenx.tar.gz -C /content/gridtokenx && pip install -q lightgbm torch pandas numpy scikit-learn pyarrow pyyaml mlflow optuna && cd /content/gridtokenx && python colab_train.py 2>&1 | tee /tmp/train.log'
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 
@@ -104,12 +106,31 @@ tune trials="50":
 # ── PEA Onboarding ───────────────────────────────────────────────────────────
 
 # Onboard real PEA SCADA data: distribution check, scaler refit, meta-learner refit, backtest
-pea-onboard input="data/pea_telemetry_raw.csv" calib="3":
+pea-onboard input="data/raw/pea_telemetry_raw.csv" calib="3":
     {{python}} data/pea_onboard.py --input {{input}} --calib-months {{calib}}
 
 # Backtest only (no model refit) — safe for read-only audit
-pea-backtest input="data/pea_telemetry_raw.csv":
+pea-backtest input="data/raw/pea_telemetry_raw.csv":
     {{python}} data/pea_onboard.py --input {{input}} --no-refit
+
+# ── 2026 Strategy & Commissioning ──────────────────────────────────────────
+
+# Run 12-month backtest (May 2025 - Apr 2026)
+backtest-12m:
+    PYTHONPATH=. {{python}} results/backtest_12m.py
+
+# Run N-1 contingency stress test (April 2026)
+stress-test:
+    {{python}} optimizer/contingency_analysis.py
+
+# Run Cluster-wide ADMM bottleneck test
+cluster-test:
+    {{python}} optimizer/cluster_stress_test.py
+
+# Generate commissioning report and dashboard
+report: backtest-12m stress-test cluster-test
+    {{python}} results/plot_2026_strategy.py
+    @echo "✅ Commissioning report and dashboard ready in results/"
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 
@@ -119,6 +140,6 @@ setup:
 
 # Remove generated artifacts
 clean:
-    rm -f data/train.parquet data/val.parquet data/test.parquet data/scaler.pkl
+    rm -f data/processed/train.parquet data/processed/val.parquet data/processed/test.parquet data/processed/scaler.pkl
     rm -f models/lgbm.pkl models/tcn.pt models/meta_learner.pkl
     rm -f results/evaluation_report.json results/pea_optimization_report.json

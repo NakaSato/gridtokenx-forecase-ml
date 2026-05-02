@@ -39,4 +39,4 @@ if __name__ == "__main__":
     print(f"Saving to: {OUT}\n")
     for key in FILES:
         download(key)
-    print("\nDone. Load with: pd.read_hdf('data/nrel_perform/<file>.h5')")
+    print("\nDone. Load with: pd.read_hdf('data/raw/nrel_perform/<file>.h5')")

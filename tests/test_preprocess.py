@@ -14,7 +14,7 @@ from data.preprocess import engineer_features, split, impute_bess_soc
 
 
 def _make_sample_df(n_hours=500):
-    """Create a minimal synthetic DataFrame matching ko_tao_grid.parquet schema."""
+    """Create a minimal synthetic DataFrame matching island_grid.parquet schema."""
     rng = np.random.default_rng(42)
     idx = pd.date_range("2025-01-01", periods=n_hours, freq="h")
     df = pd.DataFrame({

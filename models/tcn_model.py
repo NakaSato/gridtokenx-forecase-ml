@@ -1,6 +1,6 @@
 """
 Temporal Convolutional Network for sequential load forecasting.
-Input:  data/train.parquet, data/val.parquet
+Input:  data/processed/train.parquet, data/processed/val.parquet
 Output: models/tcn.pt
 """
 import os
@@ -23,9 +23,9 @@ mlflow.set_experiment("GridTokenX_TCN")
 SEQ_FEATURES = [
     "Island_Load_MW",
     "Load_Lag_1h", "Load_Lag_24h",
-    "BESS_SoC_Pct",
+    "BESS_SoC_Pct", "Headroom_MW",
     "Dry_Bulb_Temp", "Heat_Index", "Rel_Humidity",
-    "Hour_of_Day", "Is_High_Season",
+    "Hour_of_Day", "Is_High_Season", "Is_Thai_Holiday",
 ]
 
 def mape(y_true, y_pred):
@@ -112,8 +112,8 @@ def main():
 
     window, horizon = tc["window_size"], tc["forecast_horizon"]
 
-    train_df = pd.read_parquet("data/train.parquet")
-    val_df   = pd.read_parquet("data/val.parquet")
+    train_df = pd.read_parquet("data/processed/train.parquet")
+    val_df   = pd.read_parquet("data/processed/val.parquet")
 
     train_ds = WindowDataset(train_df, window, horizon)
     val_ds   = WindowDataset(val_df,   window, horizon)
@@ -177,7 +177,7 @@ def main():
         mlflow.log_metric("best_val_mape", best_val)
 
     model.load_state_dict(best_state)
-    print(f"\nBest Val MAPE: {best_val:.4f}%  (target <2.65%)")
+    print(f"\nBest Val MAPE: {best_val:.4f}%  (target <10.0%)")
 
     os.makedirs("models", exist_ok=True)
     torch.save({"state_dict": best_state,

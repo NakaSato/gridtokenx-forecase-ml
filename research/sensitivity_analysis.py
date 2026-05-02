@@ -45,7 +45,7 @@ def run_sensitivity_study(base_df_path, temp_shifts=[-2, 0, 2, 4]):
 
 if __name__ == "__main__":
     os.makedirs("research", exist_ok=True)
-    report = run_sensitivity_study("data/ko_tao_grid.parquet")
+    report = run_sensitivity_study("data/processed/island_grid.parquet")
     print("--- Climate Sensitivity Analysis (Temperature Shift) ---")
     print(report)
     

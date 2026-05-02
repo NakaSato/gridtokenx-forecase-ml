@@ -1,5 +1,5 @@
 """
-Recalibrate ko_tao_grid.parquet using real-world reference datasets:
+Recalibrate island_grid.parquet using real-world reference datasets:
   - microgrid_weather_material.csv  → temperature, humidity, PV, carbon intensity, diesel price
   - microgrid_load_price_pv.csv     → load shape, market price, PV generation patterns
   - NREL PERFORM h5                 → load temporal patterns (hourly actuals)
@@ -33,7 +33,7 @@ ko_tao_wx["time"] = pd.to_datetime(ko_tao_wx["time"])
 ko_tao_wx = ko_tao_wx.set_index("time")
 
 # ── Load existing synthetic dataset ─────────────────────────────────────────
-df = pd.read_parquet(DATA / "ko_tao_grid.parquet")
+df = pd.read_parquet(DATA / "island_grid.parquet")
 df.index = pd.to_datetime(df.index)
 
 # ── 1. Recalibrate temperature & humidity from Ko Tao real weather ───────────

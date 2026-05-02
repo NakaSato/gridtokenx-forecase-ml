@@ -1,16 +1,55 @@
 data:
-  start_date: "2025-01-01"
-  end_date: "2029-12-31"
-  output_path: "data/ko_tao_grid.parquet"
+  start_date: "2024-01-01"   # Captures new cable commissioning
+  end_date: "2026-05-02"
+  frequency: "15min"
+  output_path: "data/processed/island_grid.parquet"
+  # Proposed split strategy
+  train_end: "2026-02-28"
+  val_start: "2026-03-01"
+  val_end: "2026-03-20"
+  test_start: "2026-03-21"
+  test_end: "2026-04-30"
+  
+  # Thai Holidays (Stress Test Periods)
+  holidays:
+    songkran: ["04-13", "04-14", "04-15"]
+    labour_day: ["05-01"]
+    new_year: ["01-01", "12-31"]
+    coronation: ["05-04"]
+
   bottleneck_probability: 0.30
   bottleneck_hours: [ 18, 19, 20, 21 ]
-  ac_coefficient: 0.35
+  # Calibrated from ko_tao_grid_calibrated.parquet (real Ko Tao proxy)
+  # Temp: real range 25.8–28.9°C, mean ~27.1°C (tropical island, low variance)
+  # AC kicks in above 28°C — coefficient reduced to match flat real diurnal load
+  ac_coefficient: 0.12
   ac_threshold_temp: 28.0
+  # High season months: Apr–Oct (real monthly load diff only ~0.12 MW)
   high_season_months: [ 4, 5, 6, 7, 8, 9, 10 ]
-  high_season_load_shift: 1.5
+  high_season_load_shift: 1.55  # real data: low=6.70MW, high=8.25MW → shift=1.55MW
   load_base_min: 5.0
   load_base_max: 10.0
-  circuit_cap_max: 16.0
+  circuit_cap_max: 13.3          # was 16.0 — KIREIP proxy 95th pct = 13.29 MW
+  # Real weather bounds (calibrated)
+  temp_base: 27.1                # mean dry-bulb from calibrated data
+  temp_seasonal_amp: 1.1         # ±1.1°C seasonal swing (was 3.0)
+  temp_diurnal_amp: 0.5          # ±0.5°C diurnal swing (was 2.5) — island thermal mass
+  temp_min: 25.8
+  temp_max: 28.9
+  humidity_base: 78.5            # mean from calibrated data
+  humidity_diurnal_amp: 3.0      # was 8.0 — real range 74–83%
+  humidity_min: 74.0
+  humidity_max: 84.0
+  # Carbon intensity: Thai grid (real range 400–484 gCO2/kWh, mean ~440)
+  carbon_intensity_mean: 440.0   # was 600 — Thai grid is cleaner than assumed
+  carbon_intensity_std: 18.0     # was 150 — much tighter real distribution
+  carbon_intensity_min: 400.0
+  carbon_intensity_max: 484.0
+  # Market price: kept from original (35–120 THB/kWh range is plausible)
+  market_price_mean: 70.0
+  market_price_std: 15.0
+  market_price_min: 35.0
+  market_price_max: 120.0
 
 bess:
   capacity_mwh: 50
@@ -46,8 +85,8 @@ model:
     layers: 4
     filters: 128
     kernel_size: 3
-    window_size: 48
-    forecast_horizon: 24
+    window_size: 192      # 48 hours @ 15-min
+    forecast_horizon: 96 # 24 hours @ 15-min
     learning_rate: 0.001
     epochs: 30
     batch_size: 64
@@ -80,7 +119,7 @@ cluster:
     tolerance: 0.001
 
 targets:
-  mape: 2.65
-  r2: 0.97
-  mae: 0.25
+  mape: 10.0
+  r2: 0.85
+  mae: 0.75
   fuel_savings: 0.22

@@ -25,7 +25,7 @@ def mape(y_true, y_pred):
 
 @pytest.fixture(scope="module")
 def test_data():
-    return pd.read_parquet(os.path.join(ROOT, "data/test.parquet"))
+    return pd.read_parquet(os.path.join(ROOT, "data/processed/test.parquet"))
 
 
 @pytest.fixture(scope="module")
@@ -57,7 +57,7 @@ class TestModelArtifactsExist:
         assert os.path.exists(os.path.join(ROOT, "models/meta_learner.pkl"))
 
     def test_scaler_exists(self):
-        assert os.path.exists(os.path.join(ROOT, "data/scaler.pkl"))
+        assert os.path.exists(os.path.join(ROOT, "data/processed/scaler.pkl"))
 
     def test_lgbm_loadable(self):
         with open(os.path.join(ROOT, "models/lgbm.pkl"), "rb") as f:
@@ -78,7 +78,7 @@ class TestModelArtifactsExist:
         assert hasattr(meta, "predict")
 
     def test_scaler_loadable(self):
-        with open(os.path.join(ROOT, "data/scaler.pkl"), "rb") as f:
+        with open(os.path.join(ROOT, "data/processed/scaler.pkl"), "rb") as f:
             scaler = pickle.load(f)
         assert hasattr(scaler, "transform")
 
@@ -87,22 +87,22 @@ class TestDataArtifactsExist:
     """Verify all required data files exist."""
 
     def test_train_exists(self):
-        assert os.path.exists(os.path.join(ROOT, "data/train.parquet"))
+        assert os.path.exists(os.path.join(ROOT, "data/processed/train.parquet"))
 
     def test_val_exists(self):
-        assert os.path.exists(os.path.join(ROOT, "data/val.parquet"))
+        assert os.path.exists(os.path.join(ROOT, "data/processed/val.parquet"))
 
     def test_test_exists(self):
-        assert os.path.exists(os.path.join(ROOT, "data/test.parquet"))
+        assert os.path.exists(os.path.join(ROOT, "data/processed/test.parquet"))
 
     def test_train_nonempty(self):
-        df = pd.read_parquet(os.path.join(ROOT, "data/train.parquet"))
+        df = pd.read_parquet(os.path.join(ROOT, "data/processed/train.parquet"))
         assert len(df) > 1000, f"Train too small: {len(df)} rows"
 
     def test_splits_no_overlap(self):
-        train = pd.read_parquet(os.path.join(ROOT, "data/train.parquet"))
-        val = pd.read_parquet(os.path.join(ROOT, "data/val.parquet"))
-        test = pd.read_parquet(os.path.join(ROOT, "data/test.parquet"))
+        train = pd.read_parquet(os.path.join(ROOT, "data/processed/train.parquet"))
+        val = pd.read_parquet(os.path.join(ROOT, "data/processed/val.parquet"))
+        test = pd.read_parquet(os.path.join(ROOT, "data/processed/test.parquet"))
         assert train.index.max() < val.index.min()
         assert val.index.max() < test.index.min()
 

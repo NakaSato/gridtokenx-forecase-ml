@@ -31,20 +31,13 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 with open(os.path.join(ROOT, "config.yaml")) as f:
     CFG = yaml.safe_load(f)
 
-WINDOW = CFG["model"]["tcn"]["window_size"]   # 48
+from models.lgbm_model import FEATURES as LGBM_FEATURES
+
+FREQ = CFG["data"].get("frequency", "h")
+SPH  = 4 if FREQ == "15min" else 1
+WINDOW = CFG["model"]["tcn"]["window_size"] 
 CAP_MAX = CFG["data"]["circuit_cap_max"]
 BOTTLENECK_HOURS = CFG["data"]["bottleneck_hours"]
-LGBM_FEATURES = [
-    "Dry_Bulb_Temp", "Rel_Humidity", "Solar_Irradiance", "Heat_Index",
-    "Temp_Roll_Mean_3h", "Temp_Roll_Mean_6h",
-    "Humid_Roll_Mean_3h", "Humid_Roll_Mean_6h", "Temp_Gradient",
-    "Carbon_Intensity", "Market_Price",
-    "Tourist_Index", "Is_High_Season",
-    "Hour_of_Day", "Day_of_Week",
-    "Load_Lag_1h", "Load_Lag_24h", "Load_Lag_168h",
-    "Load_Roll_Mean_3h", "Load_Roll_Std_3h",
-    "Load_Roll_Mean_6h", "Load_Roll_Std_6h",
-]
 
 
 def circuit_for_hour(h: int) -> float:
@@ -53,15 +46,17 @@ def circuit_for_hour(h: int) -> float:
 
 def row_to_telemetry(row: pd.Series) -> dict:
     return {
-        "island_load_mw": float(row["Island_Load_MW"]),
-        "load_lag_1h":    float(row["Load_Lag_1h"]),
-        "load_lag_24h":   float(row["Load_Lag_24h"]),
-        "bess_soc_pct":   float(row["BESS_SoC_Pct"]),
-        "dry_bulb_temp":  float(row["Dry_Bulb_Temp"]),
-        "heat_index":     float(row["Heat_Index"]),
-        "rel_humidity":   float(row["Rel_Humidity"]),
-        "hour_of_day":    float(row["Hour_of_Day"]),
-        "is_high_season": float(row["Is_High_Season"]),
+        "island_load_mw":  float(row["Island_Load_MW"]),
+        "load_lag_1h":     float(row["Load_Lag_1h"]),
+        "load_lag_24h":    float(row["Load_Lag_24h"]),
+        "bess_soc_pct":    float(row["BESS_SoC_Pct"]),
+        "headroom_mw":     float(row.get("Headroom_MW", 0.0)),
+        "dry_bulb_temp":   float(row["Dry_Bulb_Temp"]),
+        "heat_index":      float(row["Heat_Index"]),
+        "rel_humidity":    float(row["Rel_Humidity"]),
+        "hour_of_day":     float(row["Hour_of_Day"]),
+        "is_high_season":  float(row["Is_High_Season"]),
+        "is_thai_holiday": float(row.get("Is_Thai_Holiday", 0.0)),
     }
 
 
@@ -70,8 +65,10 @@ def lgbm_features_for(row: pd.Series) -> dict:
 
 
 def circuit_forecast_for(idx, df: pd.DataFrame, pos: int) -> list:
-    """24h circuit capacity forecast starting from pos."""
-    hours = [df.index[min(pos + h, len(df) - 1)].hour for h in range(24)]
+    """24h circuit capacity forecast starting from pos (96 steps for 15min)."""
+    # 24 hours = 24 * SPH steps
+    horiz_steps = 24 * SPH
+    hours = [df.index[min(pos + s, len(df) - 1)].hour for s in range(horiz_steps)]
     return [circuit_for_hour(h) for h in hours]
 
 
@@ -112,7 +109,7 @@ def main():
         print("   Start it with:  python -m uvicorn api.serve:app --port 8000")
         sys.exit(1)
 
-    df = pd.read_parquet(os.path.join(ROOT, "data/test.parquet"))
+    df = pd.read_parquet(os.path.join(ROOT, "data/processed/test.parquet"))
     n_rows = min(args.rows, len(df))
     print(f"   Streaming {n_rows} rows from test.parquet (window={WINDOW})")
 
@@ -157,11 +154,15 @@ def main():
             ar = requests.post(f"{API}/stream/actual", json=act_payload, timeout=5)
             ar.raise_for_status()
             metrics = ar.json()["metrics"]
-            print_row(i, ts, actual, fc_val, metrics)
+            
+            # Reduce printing if speed is 0 (fast replay)
+            if args.speed > 0 or i % 100 == 0 or i == n_rows - 1:
+                print_row(i, ts, actual, fc_val, metrics)
+            
             forecast_step += 1
         else:
             # Still filling buffer — just show actual, no forecast yet
-            if i % 10 == 0:
+            if i % 50 == 0:
                 print(f"  {i:>5}  {str(ts):<20}  {actual:>7.3f}  "
                       f"{'(buffering)':>8}  {'—':>7}  {'—':>7}  {'—':>7}  {'—':>7}")
 

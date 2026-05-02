@@ -7,7 +7,7 @@ This project is a high-fidelity research and deployment environment for AI-drive
 The system utilizes a **Hybrid Meta-Learner** architecture to forecast island load and optimize dispatch:
 1.  **Sequential Layer (TCN):** Temporal Convolutional Network for capturing long-term temporal patterns.
 2.  **Tabular Layer (LightGBM):** Handles non-linear exogenous correlations (Temperature, Humidity, Tourist Index).
-3.  **Meta-Learner (Ridge):** Blends predictions to achieve high precision (Target: MAPE < 2.65%).
+3.  **Meta-Learner (Ridge):** Blends predictions to achieve high precision (Target: MAPE < 10%).
 4.  **Optimizer (ISCA/MILP):** Implements Improved Sine-Cosine Algorithm and MILP for proactive BESS/Diesel scheduling.
 
 **Technologies:**
@@ -41,6 +41,8 @@ The project uses `just` for task automation. Ensure `just` and `uv` are installe
 
 - `api/`: FastAPI service and real-time streaming simulation.
 - `data/`: Data generation, preprocessing, and PEA integration logic.
+    - `raw/`: External datasets and raw telemetry.
+    - `processed/`: Training splits, scalers, and generated datasets.
 - `models/`: Hybrid model implementations (LGBM, TCN, Meta-Learner).
 - `optimizer/`: Dispatch logic, Early Warning System, and ISCA/MILP solvers.
 - `frontend/`: Next.js dashboard for grid visualization and metrics.

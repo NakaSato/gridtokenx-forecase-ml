@@ -54,13 +54,13 @@ Physics rules:
 - Circuit_Cap_MW bottleneck: stochastic drop <5 MW at 18:00–22:00 with 30% probability
 - BESS charges (SoC increases) when Circuit_Cap > Load; discharges otherwise; clamp 20–95%
 
-Save output to data/ko_tao_grid.parquet using pandas + pyarrow.
+Save output to data/processed/island_grid.parquet using pandas + pyarrow.
 ```
 
 ---
 
 ```
-Generate a Python script `data/preprocess.py` that loads data/ko_tao_grid.parquet and:
+Generate a Python script `data/preprocess.py` that loads data/processed/island_grid.parquet and:
 
 1. Engineers features:
    - Lag features: Island_Load_MW at t-1h, t-24h, t-168h
@@ -76,8 +76,8 @@ Generate a Python script `data/preprocess.py` that loads data/ko_tao_grid.parque
 
 3. Normalizes numeric features using StandardScaler fitted on train only
 
-4. Saves train/val/test to data/train.parquet, data/val.parquet, data/test.parquet
-   and scaler to data/scaler.pkl
+4. Saves train/val/test to data/processed/train.parquet, data/processed/val.parquet, data/processed/test.parquet
+   and scaler to data/processed/scaler.pkl
 ```
 
 ---
@@ -89,7 +89,7 @@ Generate a Python script `data/preprocess.py` that loads data/ko_tao_grid.parque
 ### Auto Prompt
 ```
 Generate `models/lgbm_model.py` that:
-- Loads data/train.parquet and data/val.parquet
+- Loads data/processed/train.parquet and data/processed/val.parquet
 - Trains a LightGBM regressor on tabular/exogenous features:
   [Dry_Bulb_Temp, Rel_Humidity, Solar_Irradiance, Wind_Speed, Cloud_Cover,
    Carbon_Intensity, Market_Price, Tourist_Index, Circuit_Cap_MW,
@@ -111,7 +111,7 @@ Generate `models/tcn_model.py` using PyTorch that:
   - Residual connections
 - Input: sliding window of 168 hours (1 week) of [Island_Load_MW lags, BESS_SoC_Pct, Net_Delta_MW]
 - Output: next 24-hour Island_Load_MW forecast
-- Trains on data/train.parquet, validates on data/val.parquet
+- Trains on data/processed/train.parquet, validates on data/processed/val.parquet
 - Saves model weights to models/tcn.pt
 - Prints MAPE and R² on val set
 ```
@@ -125,7 +125,7 @@ Generate `models/hybrid_pipeline.py` that:
 - Trains a lightweight linear meta-learner (Ridge regression) to combine both outputs
 - Target: Island_Load_MW
 - Saves meta-learner to models/meta_learner.pkl
-- Prints final MAPE, MAE, R² on test set (data/test.parquet)
+- Prints final MAPE, MAE, R² on test set (data/processed/test.parquet)
 ```
 
 ---
@@ -175,7 +175,7 @@ Generate `optimizer/isca.py` implementing the Improved Sine-Cosine Algorithm for
 ### Auto Prompt
 ```
 Generate `evaluate.py` that:
-1. Loads data/test.parquet and runs the full hybrid pipeline (lgbm + tcn + meta-learner)
+1. Loads data/processed/test.parquet and runs the full hybrid pipeline (lgbm + tcn + meta-learner)
 2. Runs dispatch.py with predicted vs actual load
 3. Computes and prints:
    - MAPE, MAE, R² for load forecast
@@ -241,7 +241,7 @@ python evaluate.py                   # Phase 4
 Generate `optimizer/tune.py` that uses Optuna to automate the search for optimal hyperparameters across the AI Predictive Control Layer.
 
 1. **Objective Function:**
-   - Ingest data/train.parquet and data/val.parquet.
+   - Ingest data/processed/train.parquet and data/processed/val.parquet.
    - Map "High Production Costs" pain point into a minimizing metric (MAPE).
    - Suggest hyperparameters for both LightGBM and TCN.
 
