@@ -29,7 +29,8 @@ def _add_cable_types(net):
 
 def create_ko_tao_network(
     tao_load_mw=7.0, phangan_load_mw=20.0, samui_load_mw=65.0,
-    tao_diesel_mw=0.0, samui_diesel_mw=0.0, samui_bess_mw=0.0
+    tao_diesel_mw=0.0, phangan_diesel_mw=0.0, samui_diesel_mw=0.0,
+    phangan_bess_mw=0.0, samui_bess_mw=0.0
 ):
     net = pp.create_empty_network()
     _add_cable_types(net)
@@ -75,8 +76,13 @@ def create_ko_tao_network(
 
     if tao_diesel_mw > 0:
         pp.create_sgen(net, b_tao_33, p_mw=tao_diesel_mw, name="Tao Diesel")
+    if phangan_diesel_mw > 0:
+        pp.create_sgen(net, b_phangan_115, p_mw=phangan_diesel_mw, name="Phangan Diesel")
     if samui_diesel_mw > 0:
         pp.create_sgen(net, b_samui_115, p_mw=samui_diesel_mw, name="Samui Diesel")
+    
+    if phangan_bess_mw != 0:
+        pp.create_sgen(net, b_phangan_115, p_mw=phangan_bess_mw, name="Phangan BESS")
     if samui_bess_mw != 0:
         pp.create_sgen(net, b_samui_115, p_mw=samui_bess_mw, name="Samui BESS")
 
@@ -84,10 +90,12 @@ def create_ko_tao_network(
 
 def verify_dispatch_stability(
     tao_load_mw=7.0, phangan_load_mw=20.0, samui_load_mw=65.0,
-    tao_diesel_mw=0.0, samui_diesel_mw=0.0, samui_bess_mw=0.0
+    tao_diesel_mw=0.0, phangan_diesel_mw=0.0, samui_diesel_mw=0.0,
+    phangan_bess_mw=0.0, samui_bess_mw=0.0
 ):
     net = create_ko_tao_network(tao_load_mw, phangan_load_mw, samui_load_mw,
-                                tao_diesel_mw, samui_diesel_mw, samui_bess_mw)
+                                tao_diesel_mw, phangan_diesel_mw, samui_diesel_mw,
+                                phangan_bess_mw, samui_bess_mw)
     try:
         pp.runpp(net, algorithm="nr")
         v_tao = net.res_bus.at[b_tao_33, "vm_pu"] if 'b_tao_33' in locals() else net.res_bus.iloc[-1]["vm_pu"]

@@ -24,8 +24,10 @@ services:
       - ./results:/app/results
       - ./mlruns:/app/mlruns
       - ./mlflow.db:/app/mlflow.db
+      - ./api_state.db:/app/api_state.db
     environment:
       - KMP_DUPLICATE_LIB_OK=TRUE
+      - OMP_NUM_THREADS=1
       - MLFLOW_TRACKING_URI=http://mlflow:5000
     depends_on:
       - mlflow

@@ -69,23 +69,36 @@ def run_cluster_test():
         # Simple rule: Priority to BESS, then Diesel if needed
         # (Using pea_optimize logic simplified for cluster speed)
         
-        def local_dispatch(load, soc, cap_mwh=50.0):
-            # Assume 10 MW Diesel, 8 MW BESS Max
-            if load <= 13.3: # Cable ok
-                return 0.0, 0.0, load # diesel, bess, import
+        def local_dispatch(load, soc, name, cap_mwh=50.0):
+            # 2026 Strategy Updates:
+            # Ko Tao: No BESS, 10 MW Diesel
+            # Ko Phangan: 50 MWh BESS, No Diesel
+            # Ko Samui: 50 MWh BESS, 10 MW Diesel (EGAT+Mobile)
             
-            deficit = load - 13.3
-            # Use BESS
-            b_mw = min(deficit, 8.0, (soc - 0.20) * cap_mwh * 4) # 4 steps/h
+            # Cable limit (import capacity)
+            # Tao distal 33kV link is noted as "0-16 MW"
+            import_limit = 13.3 if name == "Tao" else 30.0
+            
+            if load <= import_limit:
+                return 0.0, 0.0, load
+            
+            deficit = load - import_limit
+            
+            # BESS Priority (if exists)
+            bess_cap = 8.0 if name != "Tao" else 0.0
+            b_mw = min(deficit, bess_cap, (soc - 0.20) * cap_mwh * 4) if cap_mwh > 0 else 0.0
             rem = deficit - b_mw
-            # Use Diesel
-            d_mw = min(rem, 10.0)
+            
+            # Diesel Backup (if exists)
+            diesel_cap = 10.0 if name != "Phangan" else 0.0
+            d_mw = min(rem, diesel_cap)
+            
             imp = load - d_mw - b_mw
             return d_mw, b_mw, imp
 
-        d_tao, b_tao, i_tao = local_dispatch(l_tao, soc_tao)
-        d_phangan, b_phangan, i_phangan = local_dispatch(l_phangan, soc_phangan)
-        d_samui, b_samui, i_samui = local_dispatch(l_samui, soc_samui)
+        d_tao, b_tao, i_tao = local_dispatch(l_tao, soc_tao, "Tao", cap_mwh=0)
+        d_phangan, b_phangan, i_phangan = local_dispatch(l_phangan, soc_phangan, "Phangan", cap_mwh=50)
+        d_samui, b_samui, i_samui = local_dispatch(l_samui, soc_samui, "Samui", cap_mwh=50)
         
         # ── Step 2: Global Bottleneck Check (HVDC) ──
         # Total Import from Mainland
@@ -118,7 +131,8 @@ def run_cluster_test():
         if i % 8 == 0: # Check every 2 hours to save time
             ph = verify_dispatch_stability(
                 tao_load_mw=l_tao, phangan_load_mw=l_phangan, samui_load_mw=l_samui,
-                tao_diesel_mw=d_tao, phangan_diesel_mw=d_phangan, samui_diesel_mw=d_samui
+                tao_diesel_mw=d_tao, phangan_diesel_mw=d_phangan, samui_diesel_mw=d_samui,
+                phangan_bess_mw=b_phangan, samui_bess_mw=b_samui
             )
             loading = ph.get("bottleneck_loading_pct", 0)
             print(f"  {ts.strftime('%H:%M')} | Total Import: {total_import:6.2f} MW | HVDC Load: {loading:5.1f}% | {status}")
