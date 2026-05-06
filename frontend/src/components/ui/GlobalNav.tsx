@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Zap, ChevronDown, Box, Map as MapIcon, Activity, Globe, Grid, MapPin, LayoutDashboard, Radio, Settings, Trash2 } from 'lucide-react';
 import { useNetwork } from '@/components/providers/NetworkProvider';
 import { cn } from '@/lib/common';
+import LogoutButton from '@/components/LogoutButton';
 
 const NAV_ITEMS = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -24,6 +25,8 @@ export function GlobalNav() {
     const [newTargetUrl, setNewTargetUrl] = useState('');
     const pathname = usePathname();
     const { apiTarget, setApiTarget, availableTargets, removeTarget } = useNetwork();
+
+    if (pathname === '/login') return null;
 
     const active = NAV_ITEMS.find(i => i.to === pathname);
     const isConnected = !!apiTarget;
@@ -141,6 +144,9 @@ export function GlobalNav() {
                         </div>
                     )}
                 </div>
+
+                {/* Logout Button */}
+                <LogoutButton />
             </div>
 
             {/* Network modal */}

@@ -25,9 +25,9 @@ export interface PCCStatus {
 }
 
 export const PCC: { lat: number; lon: number; label: string } = {
-    lat: 9.528326082141575,
-    lon: 99.99007762999207,
-    label: 'PCC — Main Grid Connection',
+    lat: 9.566897,
+    lon: 100.003052,
+    label: 'PCC — Samui Transition (S2)',
 };
 
 // ── Boundary Polygon ─────────────────────────────────────────────────────
@@ -36,16 +36,16 @@ export const PCC: { lat: number; lon: number; label: string } = {
 export const MICROGRID_BOUNDARY = {
     type: 'Polygon' as const,
     coordinates: [[
-        [99.9887, 9.5270], // SW
-        [99.9922, 9.5270], // SE
-        [99.9922, 9.5298], // NE
-        [99.9887, 9.5298], // NW
-        [99.9887, 9.5270], // close ring
+        [99.9887, 9.5650], // SW
+        [100.0050, 9.5650], // SE
+        [100.0050, 9.5685], // NE
+        [99.9887, 9.5685], // NW
+        [99.9887, 9.5650], // close ring
     ]] as [number, number][][],
 };
 
-export const MICROGRID_CENTER = { lat: 9.528326082141575, lon: 99.99007762999207 };
-export const MICROGRID_LABEL = 'Surat Thani';
+export const MICROGRID_CENTER = { lat: 9.738, lon: 99.922 };
+export const MICROGRID_LABEL = 'Ko Tao-Phangan-Samui Cluster';
 
 // ── Feeder Network ───────────────────────────────────────────────────────
 // Electrical connectivity from real meter coordinates

@@ -73,8 +73,8 @@ const GridTopology3D: FC<GridTopology3DProps> = () => {
                     const mappedHouses = statusData.meters.map((m: any, idx: number) => ({
                         id: m.meter_id,
                         name: m.location_name || `House ${idx + 1}`,
-                        latitude: m.latitude || 9.528326082141575,
-                        longitude: m.longitude || 99.99007762999207,
+                        latitude: m.latitude || 9.566897,
+                        longitude: m.longitude || 100.003052,
                         phase: m.phase || 'A',
                         generation: 0,
                         consumption: 0,

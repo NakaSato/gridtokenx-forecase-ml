@@ -54,9 +54,9 @@ const ElectricalGridMap = () => {
 
   // State
   const [viewState, setViewState] = usePersistedViewState('electrical-grid', {
-    longitude: 99.99007762999207,
-    latitude: 9.528326082141575,
-    zoom: 6
+    longitude: 99.922,
+    latitude: 9.738,
+    zoom: 9
   });
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [selectedInfrastructure, setSelectedInfrastructure] = useState<ElectricalInfrastructure | null>(null);

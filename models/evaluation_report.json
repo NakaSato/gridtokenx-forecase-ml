@@ -1,0 +1,26 @@
+{
+  "forecast": {
+    "mape": 3.3779,
+    "mae": 0.2725,
+    "r2": 0.9547
+  },
+  "backtest_24h_mape": 3.3782,
+  "backtest_pea_pass": true,
+  "dispatch": {
+    "days_evaluated": 37,
+    "total_fuel_kg": 5084.57,
+    "reactive_fuel_kg": 1287.82,
+    "fuel_savings_pct": -294.82,
+    "total_carbon_kg": 13625.51,
+    "carbon_reduction_pct": -294.82,
+    "diesel_hours": 3551,
+    "bess_soh_estimate": 0.9999
+  },
+  "targets_met": {
+    "mape_ok": true,
+    "r2_ok": true,
+    "mae_ok": true,
+    "fuel_savings_ok": false,
+    "backtest_mape_pea_ok": true
+  }
+}

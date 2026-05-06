@@ -11,6 +11,7 @@ import { usePersistedViewState } from '@/hooks/usePersistedViewState';
 import { useElectricalGridData } from '@/components/maps/electrical-grid';
 import { SearchFilterPanel } from './components/SearchFilterPanel';
 import { createLineLayer, createGlowLayer, createHouseLayer, createHouseGlowLayer } from './layers/microGridLayers';
+import { StaticInfrastructureLayers } from './layers/StaticInfrastructureLayers';
 import { MICROGRID_CENTER, filterMetersInBoundary, PCC } from './utils/geo';
 import { Zap, Sun, Battery, Plug, Globe, Moon, Satellite, Power, Link2, Link2Off, Layers, RefreshCw, Loader2, CircuitBoard, MapPin } from 'lucide-react';
 
@@ -38,6 +39,7 @@ export function MicroGridMap() {
     const [loading, setLoading] = useState(true);
     const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
     const [hoverInfo, setHoverInfo] = useState<{ meter: MeterFeature; x: number; y: number } | null>(null);
+    const [gridHoverInfo, setGridHoverInfo] = useState<{ properties: any; x: number; y: number } | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<'all' | 'producer' | 'consumer'>('all');
     const [viewState, setViewState] = usePersistedViewState('micro-grid', { longitude: MICROGRID_CENTER.lon, latitude: MICROGRID_CENTER.lat, zoom: 15, pitch: 0, bearing: 0 });
@@ -331,18 +333,6 @@ export function MicroGridMap() {
                 </button>
 
                 <button
-                    onClick={() => setShowInfraMap(!showInfraMap)}
-                    className={`glass px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] shadow-xl transition-colors ${
-                        showInfraMap
-                            ? 'text-red-400 border-red-500/30 hover:bg-red-500/10'
-                            : 'text-slate-500 border-white/10 hover:text-white'
-                    }`}
-                    title="Toggle OpenInfraMap power lines"
-                >
-                    <Layers className="w-3 h-3" /> OIM
-                </button>
-
-                <button
                     onClick={() => setShowInfraData(!showInfraData)}
                     className={`glass px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] shadow-xl transition-colors ${
                         showInfraData
@@ -371,10 +361,25 @@ export function MicroGridMap() {
                 onMove={(evt: ViewStateChangeEvent) => setViewState(evt.viewState)}
                 style={{ width: '100%', height: '100%' }}
                 mapStyle={mapStyle}
-                interactiveLayerIds={['house-points']}
+                interactiveLayerIds={['house-points', 'master-tx-line', 'master-nodes']}
                 onMouseMove={(e) => {
                     try {
                         if (!e.target.isStyleLoaded()) return;
+                        
+                        // Check master grid assets (highest priority)
+                        const masterFeatures = e.target.queryRenderedFeatures(e.point, { 
+                            layers: ['master-tx-line', 'master-nodes'] 
+                        });
+
+                        if (masterFeatures.length > 0) {
+                            setGridHoverInfo({ properties: masterFeatures[0].properties, x: e.point.x, y: e.point.y });
+                            setHoverInfo(null);
+                            return;
+                        } else {
+                            setGridHoverInfo(null);
+                        }
+
+                        // Then check meters
                         const features = e.target.queryRenderedFeatures(e.point, { layers: ['house-points'] });
                         if (features.length > 0 && features[0].geometry?.type === 'Point') {
                             const coords = (features[0].geometry as GeoJSON.Point).coordinates;
@@ -406,75 +411,7 @@ export function MicroGridMap() {
                     />
                 </Source>
 
-                {/* OpenInfraMap power lines layer */}
-                {showInfraMap && (
-                <Source
-                    id="openinframap-power"
-                    type="vector"
-                    tiles={[
-                        'https://openinframap.org/tiles/{z}/{x}/{y}.mvt',
-                    ]}
-                    maxzoom={18}
-                >
-                    {/* Power lines */}
-                    <Layer
-                        id="oim-power-line"
-                        type="line"
-                        source-layer="power_line"
-                        paint={{
-                            'line-color': '#ef4444',
-                            'line-width': 1.5,
-                            'line-opacity': 0.6,
-                        }}
-                    />
-                    {/* Power towers */}
-                    <Layer
-                        id="oim-power-tower"
-                        type="circle"
-                        source-layer="power_tower"
-                        paint={{
-                            'circle-radius': 3,
-                            'circle-color': '#f59e0b',
-                            'circle-opacity': 0.7,
-                        }}
-                    />
-                    {/* Power poles */}
-                    <Layer
-                        id="oim-power-pole"
-                        type="circle"
-                        source-layer="power_pole"
-                        paint={{
-                            'circle-radius': 2,
-                            'circle-color': '#6366f1',
-                            'circle-opacity': 0.6,
-                        }}
-                    />
-                    {/* Substations */}
-                    <Layer
-                        id="oim-substation"
-                        type="circle"
-                        source-layer="substation"
-                        paint={{
-                            'circle-radius': 5,
-                            'circle-color': '#10b981',
-                            'circle-stroke-width': 1.5,
-                            'circle-stroke-color': '#fff',
-                        }}
-                    />
-                    {/* Power plants */}
-                    <Layer
-                        id="oim-power-plant"
-                        type="circle"
-                        source-layer="power_plant"
-                        paint={{
-                            'circle-radius': 6,
-                            'circle-color': '#f43f5e',
-                            'circle-stroke-width': 2,
-                            'circle-stroke-color': '#fff',
-                        }}
-                    />
-                </Source>
-                )}
+                <StaticInfrastructureLayers showInfraData={showInfraData} />
 
                 {/* Feeder network */}
                 <Source id="feeder-lines" type="geojson" data={feederSource}>
@@ -584,29 +521,42 @@ export function MicroGridMap() {
                             <span className="text-slate-300">{name}</span>
                         </div>
                     ))}
-                    <p className="text-slate-400 font-bold uppercase tracking-widest mt-2 mb-2">Infrastructure</p>
+                    
+                    <p className="text-slate-400 font-bold uppercase tracking-widest mt-3 mb-2">Line Networks</p>
                     {[
-                        ['Transmission Substation','#ef4444'],
-                        ['Distribution Substation','#10b981'],
-                        ['Transmission Tower','#f59e0b'],
-                        ['Distribution Pole','#6366f1'],
-                        ['Power Plant','#f43f5e'],
-                        ['Solar Farm','#facc15'],
-                        ['Battery Storage','#06b6d4'],
-                        ['EV Charging Station','#a78bfa'],
-                    ].map(([name,color])=>(
-                        <div key={name} className="flex items-center gap-1.5 mb-1">
-                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{background:color}}/>
-                            <span className="text-slate-300">{name}</span>
+                        ['Khanom-Samui 115kV','#3b82f6', '3px'],
+                        ['Main Transmission','#ef4444', '1.5px'],
+                        ['Microgrid Main','#6366f1', '1.5px'],
+                        ['Cross Link','#8b5cf6', '1px dashed'],
+                    ].map(([name, color, style]) => (
+                        <div key={name} className="flex items-center gap-2 mb-1.5">
+                            <div className="w-8 h-0 border-t shrink-0" style={{
+                                borderColor: color as string, 
+                                borderTopWidth: (style as string).split(' ')[0],
+                                borderStyle: (style as string).includes('dashed') ? 'dashed' : 'solid'
+                            }}/>
+                            <span className="text-slate-300 font-medium">{name}</span>
                         </div>
                     ))}
-                    <p className="text-slate-400 font-bold uppercase tracking-widest mt-2 mb-2">Voltage Levels</p>
+
+                    <p className="text-slate-400 font-bold uppercase tracking-widest mt-3 mb-2">Voltage Lines</p>
                     {[
                         ['500 kV','#dc2626'],
                         ['230 kV','#f59e0b'],
                         ['115 kV','#3b82f6'],
                         ['33 kV','#06b6d4'],
                         ['22 kV','#10b981'],
+                    ].map(([name,color])=>(
+                        <div key={name} className="flex items-center gap-2 mb-1.5">
+                            <div className="w-8 h-0 border-t-2 shrink-0" style={{borderColor:color}}/>
+                            <span className="text-slate-300">{name}</span>
+                        </div>
+                    ))}
+
+                    <p className="text-slate-400 font-bold uppercase tracking-widest mt-3 mb-2">Nodes</p>
+                    {[
+                        ['Substation','#10b981'],
+                        ['Power Plant','#f43f5e'],
                     ].map(([name,color])=>(
                         <div key={name} className="flex items-center gap-1.5 mb-1">
                             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{background:color}}/>
@@ -639,6 +589,132 @@ export function MicroGridMap() {
                             </span>
                             <span className="text-slate-500">Volt</span>
                             <span className="text-right text-[10px] font-bold text-blue-400">{hoverInfo.meter.voltage_v.toFixed(0)} V</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Hover popup for grid assets */}
+            {gridHoverInfo && (
+                <div
+                    className="absolute z-[1100] pointer-events-none"
+                    style={{ left: gridHoverInfo.x + 12, top: gridHoverInfo.y - 12 }}
+                >
+                    <div className="glass px-3 py-2 rounded-lg shadow-xl min-w-[220px] border border-emerald-500/30">
+                        <div className="flex items-center gap-2 mb-1">
+                            {gridHoverInfo.properties.type === 'transmission' ? <Link2 className="w-4 h-4 text-blue-400" /> : <CircuitBoard className="w-4 h-4 text-emerald-400" />}
+                            <div className="flex items-center gap-1.5 overflow-hidden">
+                                <span className="text-xs font-bold text-white truncate">{gridHoverInfo.properties.name}</span>
+                                {gridHoverInfo.properties.id && (
+                                    <span className="text-[9px] bg-white/10 px-1 rounded text-slate-400 font-mono">#{gridHoverInfo.properties.id}</span>
+                                )}
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-1.5 mt-2">
+                            {gridHoverInfo.properties.voltage_kv && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">Voltage</span>
+                                    <span className="text-white font-mono">{gridHoverInfo.properties.voltage_kv} kV</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.capacity_mw && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">Capacity</span>
+                                    <span className="text-emerald-400 font-bold">{gridHoverInfo.properties.capacity_mw} MW</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.technology && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">Technology</span>
+                                    <span className="text-slate-200">{gridHoverInfo.properties.technology}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.generation && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">Generation</span>
+                                    <span className="text-rose-400 font-bold">{gridHoverInfo.properties.generation}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.link_rating && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">Link Rating</span>
+                                    <span className="text-cyan-400 font-bold">{gridHoverInfo.properties.link_rating}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.status && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">Status</span>
+                                    <span className={`font-bold ${gridHoverInfo.properties.status.includes('Bottleneck') ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                        {gridHoverInfo.properties.status.toUpperCase()}
+                                    </span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.stationed_at && (
+                                <div className="flex flex-col text-[10px] pt-1 border-t border-white/5">
+                                    <span className="text-slate-400">Stationed At</span>
+                                    <span className="text-slate-200 font-medium">{gridHoverInfo.properties.stationed_at}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.support_role && (
+                                <div className="flex flex-col text-[10px]">
+                                    <span className="text-slate-400">Support Role</span>
+                                    <span className="text-blue-400 font-bold">{gridHoverInfo.properties.support_role}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.bsfc && (
+                                <div className="flex justify-between text-[10px] pt-1 border-t border-white/5">
+                                    <span className="text-slate-400">Efficiency (BSFC)</span>
+                                    <span className="text-amber-400 font-mono">{gridHoverInfo.properties.bsfc}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.assets && (
+                                <div className="pt-1 border-t border-white/5">
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Connected Assets</span>
+                                    {Object.entries(typeof gridHoverInfo.properties.assets === 'string' ? JSON.parse(gridHoverInfo.properties.assets) : gridHoverInfo.properties.assets).map(([k, v]: [any, any]) => (
+                                        <div key={k} className="flex justify-between text-[10px] mt-0.5">
+                                            <span className="text-slate-400">{k}</span>
+                                            <span className="text-slate-200">{v}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.observed_load && (
+                                <div className="flex justify-between text-[10px] pt-1 border-t border-white/5">
+                                    <span className="text-slate-400">Load Range</span>
+                                    <span className="text-amber-400 font-bold">{gridHoverInfo.properties.observed_load}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.coordination && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">Coordination</span>
+                                    <span className="text-blue-400 font-bold">{gridHoverInfo.properties.coordination}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.power && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">Power</span>
+                                    <span className="text-slate-200">{gridHoverInfo.properties.power}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.location && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">Location</span>
+                                    <span className="text-slate-200">{gridHoverInfo.properties.location}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.osm_id && (
+                                <div className="flex justify-between text-[10px]">
+                                    <span className="text-slate-400">OSM ID</span>
+                                    <span className="text-slate-400 font-mono">{gridHoverInfo.properties.osm_id}</span>
+                                </div>
+                            )}
+                            {gridHoverInfo.properties.predictive_layer && (
+                                <div className="mt-1 bg-emerald-500/10 rounded px-1.5 py-1 flex items-center gap-1.5">
+                                    <Zap className="w-2.5 h-2.5 text-emerald-400" />
+                                    <span className="text-[9px] text-emerald-300 font-bold">{gridHoverInfo.properties.predictive_layer}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

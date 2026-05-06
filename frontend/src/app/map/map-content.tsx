@@ -18,7 +18,6 @@ import { createCustomIcon, getMeterColor, getMeterSize } from '@/components/maps
 import type { MeterData as BaseMeterData } from '@/components/maps/shared/overlays/types';
 import { MicroGridMap } from '@/components/maps/micro-grid';
 import ElectricalGridMap from '@/components/maps/electrical-grid';
-import { OsmGridMap } from '@/components/maps/osm-grid';
 import { MeterPopup } from '@/components/meters/MeterPopup';
 
 export interface MeterData extends BaseMeterData {
@@ -26,7 +25,7 @@ export interface MeterData extends BaseMeterData {
     total_consumption_kwh?: number;
 }
 
-type MapView = 'meters' | 'microgrid' | 'infra' | 'osm';
+type MapView = 'meters' | 'grid';
 type MapStyle = 'dark' | 'satellite';
 
 const TILE_URLS: Record<MapStyle, string> = {
@@ -41,9 +40,7 @@ const STYLE_ICONS: Record<MapStyle, string> = {
 
 const TABS: { id: MapView; icon: typeof MapIcon; label: string }[] = [
     { id: 'meters', icon: Zap, label: 'Smart Meters' },
-    { id: 'microgrid', icon: Grid, label: 'Micro Grid' },
-    { id: 'infra', icon: Layers, label: 'Infrastructure' },
-    { id: 'osm', icon: Globe, label: 'OSM Grid' },
+    { id: 'grid', icon: Grid, label: 'Grid' },
 ];
 
 function configureLeafletIcons() {
@@ -291,25 +288,6 @@ const UnifiedMapPage = () => {
                         onToggleVisible={() => setShowElectricalGrid(false)}
                     />
                 )}
-            </div>
-        );
-    }
-
-    if (activeView === 'infra') {
-        return (
-            <div className="h-screen w-screen relative">
-                <TabBar activeView={activeView} setActiveView={setActiveView} />
-                <ElectricalGridMap />
-            </div>
-        );
-    }
-
-
-    if (activeView === 'osm') {
-        return (
-            <div className="h-screen w-screen relative">
-                <TabBar activeView={activeView} setActiveView={setActiveView} />
-                <OsmGridMap />
             </div>
         );
     }
