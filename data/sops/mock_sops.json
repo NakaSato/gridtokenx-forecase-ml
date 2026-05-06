@@ -1,0 +1,20 @@
+{
+  "SOP-BESS-2569-12": {
+    "title": "BESS Dispatch and Pre-Charge Operations",
+    "section_4.1": "If mainland bottleneck is predicted and current SoC < 50%, initiate pre-charge sequence immediately using excess mainland power before the bottleneck window begins.",
+    "section_4.2": "During PV ramp-down events, BESS should be prioritized to cover the deficit before starting diesel generators to minimize fuel consumption.",
+    "section_4.3": "Avoid cycling BESS below 20% SoC unless in a critical N-1 contingency event."
+  },
+  "SOP-DG-2569-04": {
+    "title": "Diesel Generator Commitment and Ramping",
+    "section_3.1": "Minimum runtime for any diesel generator unit is 2 hours. Do not commit units for transient peaks < 30 minutes.",
+    "section_3.2": "Warm-up sequence requires 15 minutes. If an event is predicted within 30 minutes and BESS cannot cover the load, idle warming must begin immediately.",
+    "section_3.3": "Ramp rate must not exceed 2 MW per minute. For steep ramps, stage multiple units to spread the load."
+  },
+  "SOP-GRID-2569-01": {
+    "title": "Mainland HVDC Cable Constraints",
+    "section_2.1": "Maximum continuous import limit is 16 MW. Temporary overload to 18 MW is permitted for a maximum of 15 minutes.",
+    "section_2.2": "If HVDC loading exceeds 85%, operator must prepare island generation (Diesel) to relieve cable stress.",
+    "section_2.3": "In case of N-1 cable failure, immediately shed non-critical loads and ramp all available diesel units to maximum capacity."
+  }
+}
