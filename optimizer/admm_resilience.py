@@ -57,14 +57,18 @@ if __name__ == "__main__":
     with open("config.yaml") as f:
         cfg = yaml.safe_load(f)
     
+    cc = cfg["cluster"]
+    ca = cc["assets"]
+
     # Scenario: Ko Tao has deficit, Samui has surplus
-    tao = IslandNode("Ko Tao", local_load=8.5, renewable_gen=1.0, bess_cap=2.0, diesel_cap=10.0)
-    phangan = IslandNode("Ko Phangan", local_load=12.0, renewable_gen=5.0, bess_cap=10.0, diesel_cap=15.0)
-    samui = IslandNode("Ko Samui", local_load=30.0, renewable_gen=45.0, bess_cap=20.0, diesel_cap=0.0)
+    # Initializing IslandNodes from coordinated config
+    tao = IslandNode("Ko Tao",      local_load=8.5,  renewable_gen=ca["ko_tao"]["renewable_mw"],    bess_cap=ca["ko_tao"]["bess_mwh"],    diesel_cap=ca["ko_tao"]["diesel_mw"])
+    phangan = IslandNode("Ko Phangan", local_load=12.0, renewable_gen=ca["ko_phangan"]["renewable_mw"], bess_cap=ca["ko_phangan"]["bess_mwh"], diesel_cap=ca["ko_phangan"]["diesel_mw"])
+    samui = IslandNode("Ko Samui",    local_load=30.0, renewable_gen=ca["ko_samui"]["renewable_mw"],   bess_cap=ca["ko_samui"]["bess_mwh"],   diesel_cap=ca["ko_samui"]["diesel_mw"])
     
     nodes = [tao, phangan, samui]
-    print(f"--- Multi-Island Resilience ADMM (Cluster: {cfg['cluster']['islands']}) ---")
-    history, results = run_admm_consensus(nodes, **cfg['cluster']['admm'])
+    print(f"--- Multi-Island Resilience ADMM (Cluster: {cc['islands']}) ---")
+    history, results = run_admm_consensus(nodes, **cc['admm'])
     
     for node, res in zip(nodes, results):
         status = "EXPORTING" if res > 0 else "IMPORTING"

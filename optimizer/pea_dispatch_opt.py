@@ -51,11 +51,9 @@ from typing import List
 from scipy.optimize import milp, LinearConstraint, Bounds
 from scipy.sparse import csc_matrix
 
-# ── PEA operational parameters ───────────────────────────────────────────────
-PEA_RAMP_MW    = 3.0    # MW/h diesel ramp limit (up and down)
-PEA_MIN_UP_H   = 2      # minimum consecutive ON hours
-PEA_MIN_DN_H   = 2      # minimum consecutive OFF hours
-PEA_DIESEL_MIN = 2.0    # MW minimum stable output when ON
+from optimizer.isca import isca_optimize
+
+# ── Constants ────────────────────────────────────────────────────────────────
 SPILL_PENALTY  = 0.001  # THB/MWh curtailment (near-zero, free disposal)
 SHED_PENALTY   = 1e6    # THB/MWh load-shedding (very high)
 
@@ -82,16 +80,32 @@ def _bsfc_interp(load_factor: float, curve: dict) -> float:
     return float(np.interp(max(load_factor, 0.0), keys, vals))
 
 
+def _fit_linear_fuel(rated: float, curve: dict) -> tuple[float, float]:
+    """
+    Fit a linear fuel model: Fuel(p) = F_fixed * u + F_slope * p
+    Using 25% and 75% load factor points as representative for the operational range.
+    Units: kg/h
+    """
+    lf1, lf2 = 0.25, 0.75
+    p1, p2 = lf1 * rated, lf2 * rated
+    f1 = _bsfc_interp(lf1, curve) * p1   # g/kWh * MW = kg/h
+    f2 = _bsfc_interp(lf2, curve) * p2
+    
+    slope = (f2 - f1) / (p2 - p1)
+    intercept = f2 - slope * p2
+    return max(0.0, intercept), slope
+
+
 def _fuel_cost(p_d: float, rated: float, curve: dict,
                d_price: float, c_price: float) -> tuple[float, float, float]:
     """Return (fuel_kg, co2_kg, cost_thb)."""
-    if p_d <= 0:
+    if p_d <= 0.001:
         return 0.0, 0.0, 0.0
     lf      = p_d / rated
     sfc     = _bsfc_interp(lf, curve)
-    fuel_kg = sfc * p_d / 1000.0
+    fuel_kg = sfc * p_d                 # g/kWh * MW = kg/h
     co2_kg  = fuel_kg * 2.68
-    cost    = fuel_kg * d_price + co2_kg * c_price
+    cost    = fuel_kg * (d_price + 2.68 * c_price)
     return fuel_kg, co2_kg, cost
 
 
@@ -123,19 +137,32 @@ def _build_milp(load: np.ndarray, circuit: np.ndarray,
     deg_cost    = oc["bess_degradation_cost_per_cycle"]
     bess_max    = bc["charge_rate_mw"]
     curve       = {float(k): v for k, v in dc["bsfc_curve"].items()}
+    
+    # Operational constraints from config
+    p_min       = dc.get("min_load_mw", 2.0)
+    ramp_limit  = dc.get("ramp_rate_mw_per_h", 3.0)
+    min_up      = dc.get("min_up_time_h", 2)
+    min_dn      = dc.get("min_down_time_h", 2)
 
     n = 7 * T
 
     # ── Objective ────────────────────────────────────────────────────────────
-    sfc_opt     = _bsfc_interp(0.75, curve)
-    c_per_mw    = (sfc_opt / 1000.0) * (d_price + 2.68 * c_price) / sph
+    # Use fixed + slope model for better MILP performance
+    f_fixed, f_slope = _fit_linear_fuel(rated, curve)
+    
+    # Total cost per kg: fuel_price + carbon_factor * carbon_price
+    cost_per_kg = d_price + 2.68 * c_price
+    
+    c_u      = (f_fixed * cost_per_kg) / sph
+    c_p      = (f_slope * cost_per_kg) / sph
     
     # Handle zero BESS capacity
     depth       = bc["soc_max"] - bc["soc_min"]
     deg_per_mwh = deg_cost / (cap * depth) if cap > 0.01 else 1000.0
 
     c_obj = np.zeros(n)
-    c_obj[T:2*T]   = c_per_mw       # diesel fuel+carbon cost (per step)
+    c_obj[:T]      = c_u            # fixed cost when ON
+    c_obj[T:2*T]   = c_p            # incremental power cost
     c_obj[2*T:3*T] = deg_per_mwh / sph  # BESS discharge degradation (per step)
     c_obj[5*T:6*T] = SPILL_PENALTY / sph # curtailment
     c_obj[6*T:7*T] = SHED_PENALTY / sph  # load-shedding
@@ -182,13 +209,13 @@ def _build_milp(load: np.ndarray, circuit: np.ndarray,
         shed  = 6*T + h
 
         # C1: power balance
-        # circuit[h] + p_d + p_bp - p_bn - spill - shed = load[h]
+        # circuit[h] + p_d + p_bp - p_bn - spill + shed = load[h]
         rhs = load[h] - circuit[h]
-        add({pd: 1, pbp: 1, pbn: -1, spill: -1, shed: -1}, rhs, rhs)
+        add({pd: 1, pbp: 1, pbn: -1, spill: -1, shed: 1}, rhs, rhs)
 
         # C2: diesel bounds  P_min*u ≤ p_d ≤ P_rated*u
         add({pd: 1, u: -rated},         -np.inf, 0)   # p_d ≤ rated*u
-        add({pd: 1, u: -PEA_DIESEL_MIN}, 0, np.inf)   # p_d ≥ P_min*u
+        add({pd: 1, u: -p_min},          0, np.inf)   # p_d ≥ P_min*u
 
         # C5: SoC dynamics  s[h] = s[h-1] - dt*p_bp[h] + dt*p_bn[h]
         if h == 0:
@@ -202,11 +229,11 @@ def _build_milp(load: np.ndarray, circuit: np.ndarray,
         # C7: diesel ramp
         if h > 0:
             pd_prev = T + (h - 1)
-            add({pd: 1, pd_prev: -1}, -PEA_RAMP_MW * dt, PEA_RAMP_MW * dt)
+            add({pd: 1, pd_prev: -1}, -ramp_limit * dt, ramp_limit * dt)
 
     # C8/C9: min-up / min-down time
-    min_up_steps = int(PEA_MIN_UP_H * sph)
-    min_dn_steps = int(PEA_MIN_DN_H * sph)
+    min_up_steps = int(min_up * sph)
+    min_dn_steps = int(min_dn * sph)
     for h in range(1, T):
         u_h   = h
         u_hm1 = h - 1
@@ -215,8 +242,8 @@ def _build_milp(load: np.ndarray, circuit: np.ndarray,
         for k in range(1, min(min_dn_steps, T - h)):
             add({u_hm1: 1, u_h: -1, h + k: 1}, -np.inf, 1)
 
-    # C10: daily BESS cycle cap
-    daily_limit = 0.5 * (bc["soc_max"] - bc["soc_min"]) * cap
+    # C10: daily BESS cycle cap (Relaxed for emergencies)
+    daily_limit = 2.0 * (bc["soc_max"] - bc["soc_min"]) * cap
     row = np.zeros(n)
     row[2*T:3*T] = dt   # sum of (p_bp * dt)
     A_rows.append(row); lo_vals.append(-np.inf); hi_vals.append(daily_limit)
@@ -259,9 +286,55 @@ def pea_optimize(
     )
 
     if result.status not in (0, 1):
-        # Fallback to zeros if infeasible
-        print(f"   [MILP] Solver infeasible: {result.message}")
-        x = np.zeros(7 * T)
+        print(f"   [MILP] Solver infeasible or timeout ({result.message}). Falling back to ISCA...")
+        
+        # Lower ISCA iterations for speed during fallback
+        original_iter = cfg["optimizer"]["isca"]["max_iter"]
+        cfg["optimizer"]["isca"]["max_iter"] = 100
+        
+        try:
+            isca_res = isca_optimize(load, circuit, initial_soc, cfg)
+        finally:
+            cfg["optimizer"]["isca"]["max_iter"] = original_iter
+
+        mapped_schedule = []
+        total_shed = 0.0
+        for s in isca_res["schedule"]:
+            # Compute shed (if supplied < load)
+            supplied = s.circuit_mw + s.diesel_mw + s.bess_mw
+            shed = max(0.0, s.load_mw - supplied)
+            total_shed += shed
+            
+            # Reconstruct cost (roughly)
+            cost_per_kg = meta["d_price"] + 2.68 * meta["c_price"]
+            cost_thb = s.fuel_kg * cost_per_kg
+            
+            mapped_schedule.append(HourResult(
+                hour=s.hour,
+                load_mw=s.load_mw,
+                circuit_mw=s.circuit_mw,
+                diesel_mw=s.diesel_mw,
+                diesel_on=1 if s.diesel_mw > 0 else 0,
+                bess_mw=s.bess_mw,
+                soc_mwh=s.bess_soc * cap,
+                spill_mw=max(0.0, supplied - s.load_mw),
+                shed_mw=round(shed, 3),
+                fuel_kg=s.fuel_kg,
+                carbon_kg=s.carbon_kg,
+                cost_thb=round(cost_thb, 2)
+            ))
+            
+        return {
+            "schedule":        mapped_schedule,
+            "total_cost_thb":  round(isca_res["best_cost"], 2),
+            "total_fuel_kg":   isca_res["total_fuel_kg"],
+            "total_carbon_kg": isca_res["total_carbon_kg"],
+            "diesel_hours":    isca_res["diesel_hours"],
+            "bess_soc_final":  round(mapped_schedule[-1].soc_mwh / cap, 4) if mapped_schedule else initial_soc,
+            "total_spill_mwh": round(sum(s.spill_mw for s in mapped_schedule) / meta["sph"], 3),
+            "total_shed_mwh":  round(total_shed / meta["sph"], 3),
+            "solver_status":   f"ISCA Fallback (MILP msg: {result.message})",
+        }
     else:
         x = result.x
 

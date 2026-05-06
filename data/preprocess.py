@@ -78,9 +78,43 @@ def engineer_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     if "Tourist_Index" not in d.columns:
         d["Tourist_Index"] = d["Is_High_Season"] * 0.4 + 0.6
 
-    # Drop leaky/redundant features (Keep Circuit_Cap_MW for eval reference but not for features)
-    # Actually, we keep it for now as it's needed for Headroom calculation in future rows
+    # Drop leaky/redundant features
+    # tests expect Net_Delta_MW, Circuit_Cap_MW, and Is_Weekend to be dropped
+    for col in ["Net_Delta_MW", "Circuit_Cap_MW", "Is_Weekend"]:
+        if col in d.columns:
+            d.drop(columns=[col], inplace=True)
+
     d.dropna(inplace=True)
+    return d
+
+
+def split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Chronological 70/15/15 split."""
+    n = len(df)
+    n1 = int(n * 0.7)
+    n2 = int(n * 0.85)
+    return df.iloc[:n1], df.iloc[n1:n2], df.iloc[n2:]
+
+
+def impute_bess_soc(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """If BESS SoC is constant (e.g. from static source), re-simulate it using physics."""
+    if df["BESS_SoC_Pct"].std() > 0.1:
+        return df
+    
+    d = df.copy()
+    bc = cfg["bess"]
+    cap = bc["capacity_mwh"]
+    if cap == 0: return d # Ko Tao case
+    
+    soc = bc["soc_initial"]
+    socs = []
+    for i in range(len(d)):
+        # Delta = Load - Import_Cap (simplified)
+        delta = d["Island_Load_MW"].iloc[i] - 10.0 # assume 10MW import base
+        delta_pct = (delta / cap) * 100
+        soc = max(bc["soc_min"]*100, min(bc["soc_max"]*100, soc - delta_pct))
+        socs.append(soc)
+    d["BESS_SoC_Pct"] = socs
     return d
 
 

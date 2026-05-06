@@ -17,7 +17,9 @@ from torch.utils.data import Dataset, DataLoader
 import yaml
 import mlflow
 from models.device import get_device
+from models.mlflow_utils import setup_mlflow
 
+setup_mlflow()
 mlflow.set_experiment("GridTokenX_TCN")
 
 SEQ_FEATURES = [

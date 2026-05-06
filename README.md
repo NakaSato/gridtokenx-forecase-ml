@@ -168,8 +168,8 @@ PEA 115 kV/33 kV radial topology for the Ko Tao–Phangan–Samui cluster.
   └──────┬──────┘
          │
          │ RADIAL MAINLAND CONNECTOR (Submarine)
-         │ ├─ 115 kV Circuit 2
-         │ ├─ 115 kV Circuit 3 ⚡ BOTTLENECK (Bottom Neck)
+         │ ├─ 115 kV Circuit 3
+         │ ├─ 115 kV Circuit 2 ⚡ BOTTLENECK (Bottom Neck)
          │ ├─ 33 kV Oil Filled Cable
          │ └─ 33 kV XLPE Cable
          │

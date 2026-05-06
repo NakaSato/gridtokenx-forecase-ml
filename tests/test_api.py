@@ -69,11 +69,13 @@ class TestStreamTelemetryEndpoint:
             "load_lag_1h": 8.3,
             "load_lag_24h": 7.9,
             "bess_soc_pct": 65.0,
+            "headroom_mw": 1.5,
             "dry_bulb_temp": 32.0,
             "heat_index": 38.0,
             "rel_humidity": 75.0,
             "hour_of_day": 14.0,
             "is_high_season": 1.0,
+            "is_thai_holiday": 0.0
         }
         row.update(overrides)
         return row
@@ -84,7 +86,7 @@ class TestStreamTelemetryEndpoint:
         data = resp.json()
         assert data["status"] == "ingested"
         assert "buffer_size" in data
-        assert "needed" in data
+        assert "ready" in data
 
     def test_rejects_missing_fields(self, client):
         """Missing required TelemetryRow field should return 422."""
@@ -108,9 +110,8 @@ class TestStreamActualEndpoint:
         })
         assert resp.status_code == 200
         data = resp.json()
-        assert "error_mw" in data
-        assert abs(data["error_mw"] - 0.2) < 0.001
         assert "metrics" in data
+        assert "mae" in data["metrics"]
 
     def test_rejects_missing_fields(self, client):
         resp = client.post("/stream/actual", json={"actual_load_mw": 8.5})

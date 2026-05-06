@@ -1,5 +1,5 @@
 data:
-  start_date: "2024-01-01"   # Captures new cable commissioning
+  start_date: "2024-01-01" # Captures new cable commissioning
   end_date: "2026-05-02"
   frequency: "15min"
   output_path: "data/processed/island_grid.parquet"
@@ -9,7 +9,7 @@ data:
   val_end: "2026-03-20"
   test_start: "2026-03-21"
   test_end: "2026-04-30"
-  
+
   # Thai Holidays (Stress Test Periods)
   holidays:
     songkran: ["04-13", "04-14", "04-15"]
@@ -18,31 +18,31 @@ data:
     coronation: ["05-04"]
 
   bottleneck_probability: 0.30
-  bottleneck_hours: [ 18, 19, 20, 21 ]
+  bottleneck_hours: [18, 19, 20, 21]
   # Calibrated from ko_tao_grid_calibrated.parquet (real Ko Tao proxy)
   # Temp: real range 25.8–28.9°C, mean ~27.1°C (tropical island, low variance)
   # AC kicks in above 28°C — coefficient reduced to match flat real diurnal load
   ac_coefficient: 0.12
   ac_threshold_temp: 28.0
   # High season months: Apr–Oct (real monthly load diff only ~0.12 MW)
-  high_season_months: [ 4, 5, 6, 7, 8, 9, 10 ]
-  high_season_load_shift: 1.55  # real data: low=6.70MW, high=8.25MW → shift=1.55MW
+  high_season_months: [4, 5, 6, 7, 8, 9, 10]
+  high_season_load_shift: 1.55 # real data: low=6.70MW, high=8.25MW → shift=1.55MW
   load_base_min: 5.0
   load_base_max: 10.0
-  circuit_cap_max: 13.3          # was 16.0 — KIREIP proxy 95th pct = 13.29 MW
+  circuit_cap_max: 13.3 # was 16.0 — KIREIP proxy 95th pct = 13.29 MW
   # Real weather bounds (calibrated)
-  temp_base: 27.1                # mean dry-bulb from calibrated data
-  temp_seasonal_amp: 1.1         # ±1.1°C seasonal swing (was 3.0)
-  temp_diurnal_amp: 0.5          # ±0.5°C diurnal swing (was 2.5) — island thermal mass
+  temp_base: 27.1 # mean dry-bulb from calibrated data
+  temp_seasonal_amp: 1.1 # ±1.1°C seasonal swing (was 3.0)
+  temp_diurnal_amp: 0.5 # ±0.5°C diurnal swing (was 2.5) — island thermal mass
   temp_min: 25.8
   temp_max: 28.9
-  humidity_base: 78.5            # mean from calibrated data
-  humidity_diurnal_amp: 3.0      # was 8.0 — real range 74–83%
+  humidity_base: 78.5 # mean from calibrated data
+  humidity_diurnal_amp: 3.0 # was 8.0 — real range 74–83%
   humidity_min: 74.0
   humidity_max: 84.0
   # Carbon intensity: Thai grid (real range 400–484 gCO2/kWh, mean ~440)
-  carbon_intensity_mean: 440.0   # was 600 — Thai grid is cleaner than assumed
-  carbon_intensity_std: 18.0     # was 150 — much tighter real distribution
+  carbon_intensity_mean: 440.0 # was 600 — Thai grid is cleaner than assumed
+  carbon_intensity_std: 18.0 # was 150 — much tighter real distribution
   carbon_intensity_min: 400.0
   carbon_intensity_max: 484.0
   # Market price: kept from original (35–120 THB/kWh range is plausible)
@@ -52,7 +52,7 @@ data:
   market_price_max: 120.0
 
 bess:
-  capacity_mwh: 0  # KO TAO HAS NO BESS
+  capacity_mwh: 0 # KO TAO HAS NO BESS
   soc_min: 0.20
   soc_max: 0.80
   charge_rate_mw: 0.0
@@ -64,6 +64,10 @@ diesel:
   rated_mw: 10.0
   optimal_load_factor: 0.75
   optimal_output_mw: 7.5
+  min_load_mw: 2.0
+  ramp_rate_mw_per_h: 3.0
+  min_up_time_h: 2
+  min_down_time_h: 2
   bsfc_curve:
     0.10: 350.0
     0.25: 285.5
@@ -85,7 +89,7 @@ model:
     layers: 4
     filters: 128
     kernel_size: 3
-    window_size: 192      # 48 hours @ 15-min
+    window_size: 192 # 48 hours @ 15-min
     forecast_horizon: 96 # 24 hours @ 15-min
     learning_rate: 0.001
     epochs: 30
@@ -107,16 +111,90 @@ spatial_fidelity:
   bottleneck_assets:
     - "HVDC Koh Samui Connector (115 kV)"
     - "Koh Samui Export (115 kV)"
+  mainland_link:
+    length_km: 23.25
+    resistance_ohm_per_km: 0.05
+    voltage_kv: 115.0
+  transmission_grid:
+    khanom_to_samui:
+      circuits_115kv: 2 # One of these is a known bottleneck
+      circuits_33kv: 2
+    samui_to_phangan:
+      circuits_115kv: 1
+      circuits_33kv: 1
+    phangan_to_tao:
+      circuits_33kv: 1
+      max_limit_mw: 16.0
   critical_nodes:
-    - name: "Samui 3 Substation"
-      coords: [100.02, 9.44]
+    - name: "Khanom Substation"
+      coords: [99.860229, 9.23496]
+    - name: "Samui Station Phanom"
+      coords: [99.946747, 9.431112]
+    - name: "Samui 3 Substation (Southern)"
+      coords: [100.020218, 9.440595]
+    - name: "Phangan Substation"
+      coords: [99.994854, 9.706584]
+    - name: "Ko Tao Substation"
+      coords: [99.826585, 10.078363]
 
 cluster:
   islands: ["Ko Tao", "Ko Phangan", "Ko Samui"]
+  # SLD-coordinated ratings and simulation profiles
+  assets:
+    ko_tao:
+      diesel_mw: 10.0
+      diesel_cost: 450
+      renewable_mw: 0.5
+      bess_mwh: 0.0
+      # Simulation Profile
+      load_base_mw: 6.7
+      load_seasonal_shift_mw: 1.55
+      load_ac_coeff: 0.12
+      load_diurnal_amp: 0.08
+      bottleneck_prob: 0.30
+    ko_phangan:
+      diesel_mw: 15.0 # Mobile generators (Node 5/6 proxy)
+      diesel_cost: 380
+      renewable_mw: 2.0
+      bess_mwh: 0.0
+      # Simulation Profile
+      load_base_mw: 18.0
+      load_seasonal_shift_mw: 3.0
+      load_ac_coeff: 0.8
+      load_diurnal_amp: 2.5
+      bottleneck_prob: 0.25
+    ko_samui:
+      diesel_mw: 20.0 # 3 mobile generators
+      diesel_units: 3
+      diesel_cost: 320
+      renewable_mw: 5.0
+      bess_mwh: 50.0 # Node BESS
+      # Simulation Profile
+      load_base_mw: 55.0
+      load_seasonal_shift_mw: 12.0
+      load_ac_coeff: 3.5
+      load_diurnal_amp: 8.0
+      bottleneck_prob: 0.40
+
+  # Global Simulation Modifiers
+  simulation:
+    holiday_factors:
+      songkran: 1.25
+      default: 1.10
+    trends:
+      ev_annual_growth: 0.025
+      solar_annual_offset: 0.015
+    noise:
+      ar1_phi: 0.85
+      ar1_sigma: 0.5
+
   admm:
     max_iter: 50
     rho: 0.1
     tolerance: 0.001
+    mainland_n1_limit_mw: 160.8
+    mainland_n1_alert_mw: 145.0
+    mainland_n1_critical_mw: 160.8
 
 targets:
   mape: 10.0

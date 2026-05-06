@@ -20,12 +20,17 @@ def _add_cable_types(net):
         "max_i_ka": 0.530, "type": "cs"
     }, name="115kV_XLPE", element="line")
     
-    # 33 kV XLPE Submarine (Phangan-Tao link)
-    # Reducing impedance to reflect high-capacity PEA submarine cables
+    # 33 kV XLPE Submarine
     pp.create_std_type(net, {
         "r_ohm_per_km": 0.0800, "x_ohm_per_km": 0.1000, "c_nf_per_km": 200.0,
         "max_i_ka": 0.450, "type": "cs"
     }, name="33kV_XLPE", element="line")
+
+    # 33 kV Oil-Filled Submarine (Older, higher impedance)
+    pp.create_std_type(net, {
+        "r_ohm_per_km": 0.1250, "x_ohm_per_km": 0.1200, "c_nf_per_km": 180.0,
+        "max_i_ka": 0.350, "type": "cs"
+    }, name="33kV_Oil", element="line")
 
 def create_ko_tao_network(
     tao_load_mw=7.0, phangan_load_mw=20.0, samui_load_mw=65.0,
@@ -36,25 +41,30 @@ def create_ko_tao_network(
     _add_cable_types(net)
 
     # ── Buses ─────────────────────────────────────────────────────────────────
-    b_khanom_115 = pp.create_bus(net, vn_kv=110, name="Khanom 110kV", geodata=(99.86, 9.23))
-    b_samui_115  = pp.create_bus(net, vn_kv=110, name="Samui 110kV", geodata=(99.99, 9.70))
-    b_samui_33   = pp.create_bus(net, vn_kv=20,  name="Samui 20kV",  geodata=(99.99, 9.71))
-    b_phangan_115= pp.create_bus(net, vn_kv=110, name="Phangan 110kV", geodata=(100.06, 9.74))
-    b_phangan_33 = pp.create_bus(net, vn_kv=20,  name="Phangan 20kV",  geodata=(100.06, 9.75))
-    b_tao_33     = pp.create_bus(net, vn_kv=20,  name="Ko Tao 20kV",   geodata=(99.84, 10.09))
+    b_khanom_115 = pp.create_bus(net, vn_kv=110, name="Khanom 110kV", geodata=(99.860229, 9.234960))
+    b_khanom_33  = pp.create_bus(net, vn_kv=20,  name="Khanom 20kV",  geodata=(99.860229, 9.244960))
+    b_samui_115  = pp.create_bus(net, vn_kv=110, name="Samui Station Phanom - Samui", geodata=(99.946747, 9.431112))
+    b_samui_33   = pp.create_bus(net, vn_kv=20,  name="Samui 20kV",  geodata=(99.946747, 9.441112))
+    b_phangan_115= pp.create_bus(net, vn_kv=110, name="Phangan 110kV", geodata=(99.994854, 9.706584))
+    b_phangan_33 = pp.create_bus(net, vn_kv=20,  name="Phangan 20kV",  geodata=(99.994854, 9.716584))
+    b_tao_33     = pp.create_bus(net, vn_kv=20,  name="Ko Tao 20kV",   geodata=(99.826585, 10.078363))
 
     pp.create_ext_grid(net, bus=b_khanom_115, vm_pu=1.02, name="Mainland Slack")
 
     # ── Transformers ──────────────────────────────────────────────────────────
-    # Using 110/20 kV standard types as proxies for 115/33 kV
-    # Add tap control to boost distal voltage (negative tap = higher voltage on secondary)
+    # Khanom: 115/33kV
+    pp.create_transformer(net, b_khanom_115, b_khanom_33, std_type="25 MVA 110/20 kV")
+    # Samui: 115/33kV
     pp.create_transformer(net, b_samui_115, b_samui_33, std_type="40 MVA 110/20 kV", tap_pos=-4)
+    # Phangan: 115/33kV
     pp.create_transformer(net, b_phangan_115, b_phangan_33, std_type="25 MVA 110/20 kV", tap_pos=-4)
 
     # ── Lines (Topology-Aware) ────────────────────────────────────────────────
-    # Mainland -> Samui (Bottleneck C3)
-    pp.create_line(net, b_khanom_115, b_samui_115, 23.4, "115kV_XLPE", name="HVDC C2")
-    pp.create_line(net, b_khanom_115, b_samui_115, 23.4, "115kV_XLPE", name="HVDC C3 (Bottleneck)")
+    # Mainland -> Samui (115kV + 33kV)
+    pp.create_line(net, b_khanom_115, b_samui_115, 23.25, "115kV_XLPE", name="HVDC C3")
+    pp.create_line(net, b_khanom_115, b_samui_115, 23.25, "115kV_XLPE", name="HVDC C2 (Bottleneck)")
+    pp.create_line(net, b_khanom_33,  b_samui_33,  23.25, "33kV_Oil",    name="Mainland-Samui 33kV Oil")
+    pp.create_line(net, b_khanom_33,  b_samui_33,  23.25, "33kV_XLPE",   name="Mainland-Samui 33kV XLPE")
     
     # Samui -> Phangan
     pp.create_line(net, b_samui_115, b_phangan_115, 30.0, "115kV_XLPE", name="Samui-Phangan 115kV")
@@ -62,12 +72,12 @@ def create_ko_tao_network(
 
     # Phangan -> Ko Tao (Distal 33kV XLPE)
     # The 'Excess Power 0-16 MW' link
-    pp.create_line(net, b_phangan_33, b_tao_33, 40.0, "33kV_XLPE", name="Phangan-Tao 33kV Link")
+    pp.create_line(net, b_phangan_33, b_tao_33, 45.25, "33kV_XLPE", name="Phangan-Tao 33kV Link")
 
     # ── AVRs (Voltage Regulation) ────────────────────────────────────────────
-    # Modeled as static generators with voltage control setpoints
-    pp.create_sgen(net, b_phangan_33, p_mw=0.0, q_mvar=0.0, name="Ko Phangan AVR", vm_pu=1.0)
-    pp.create_sgen(net, b_tao_33,     p_mw=0.0, q_mvar=0.0, name="Ko Tao AVR",     vm_pu=1.0)
+    # Modeled as generators (PV bus) to strictly enforce voltage setpoints
+    pp.create_gen(net, b_phangan_33, p_mw=0.0, vm_pu=1.0, name="Ko Phangan AVR", min_q_mvar=-10.0, max_q_mvar=10.0)
+    pp.create_gen(net, b_tao_33,     p_mw=0.0, vm_pu=1.0, name="Ko Tao AVR",     min_q_mvar=-5.0, max_q_mvar=5.0)
 
     # ── Loads & Generation ────────────────────────────────────────────────────
     pp.create_load(net, b_samui_115, samui_load_mw, samui_load_mw*0.329, name="Samui Load")
@@ -98,16 +108,32 @@ def verify_dispatch_stability(
                                 phangan_bess_mw, samui_bess_mw)
     try:
         pp.runpp(net, algorithm="nr")
-        v_tao = net.res_bus.at[b_tao_33, "vm_pu"] if 'b_tao_33' in locals() else net.res_bus.iloc[-1]["vm_pu"]
-        loading_hvdc = net.res_line.at[1, "loading_percent"] # HVDC C3
         
-        return {
+        # Helper to get bus voltage by name
+        def get_v(name):
+            idx = net.bus[net.bus.name == name].index[0]
+            return net.res_bus.at[idx, "vm_pu"]
+
+        results = {
             "stable": True,
-            "v_tao_pu": round(v_tao, 4),
-            "bottleneck_loading_pct": round(loading_hvdc, 2),
+            "v_khanom_pu": round(get_v("Khanom 110kV"), 4),
+            "v_samui_pu": round(get_v("Samui Station Phanom - Samui"), 4),
+            "v_phangan_pu": round(get_v("Phangan 110kV"), 4),
+            "v_tao_pu": round(get_v("Ko Tao 20kV"), 4),
+            "bottleneck_loading_pct": round(net.res_line.at[1, "loading_percent"], 2),
             "max_line_loading": round(net.res_line["loading_percent"].max(), 2),
-            "voltage_ok": 0.95 <= v_tao <= 1.05
+            "voltage_ok": 0.95 <= get_v("Ko Tao 20kV") <= 1.05,
+            "lines": []
         }
+        
+        for idx, row in net.line.iterrows():
+            results["lines"].append({
+                "name": row["name"],
+                "loading_percent": net.res_line.at[idx, "loading_percent"],
+                "p_from_mw": net.res_line.at[idx, "p_from_mw"]
+            })
+            
+        return results
     except Exception as e:
         return {"stable": False, "error": str(e)}
 
@@ -118,14 +144,12 @@ if __name__ == "__main__":
     def _print(label, r):
         if "error" in r:
             print(f"  ❌ ERROR: {r['error']}"); return
-        status = ("✅ FEASIBLE" if r["stable"] else
-                  "⚠️  LINE OVERLOAD" if r["voltage_ok"] else "❌ VOLTAGE VIOLATION")
+        status = ("✅ FEASIBLE" if r["stable"] and r["voltage_ok"] else
+                  "⚠️  LINE OVERLOAD" if r["stable"] and r["max_line_loading"] > 100 else "❌ VOLTAGE VIOLATION")
         print(f"  {status}")
         print(f"  Voltages (p.u.):")
-        print(f"    Khanom={r['v_khanom_pu']}  SamuiHVDC={r['v_samui_hvdc_pu']}"
-              f"  Samui3={r['v_samui3_pu']}  SamuiTrans={r['v_samui_trans_pu']}"
-              f"  SamuiDist={r['v_samui_dist_pu']}  Phangan={r['v_phangan_pu']}"
-              f"  Tao={r['v_tao_pu']}")
+        print(f"    Khanom={r['v_khanom_pu']}  Samui={r['v_samui_pu']}"
+              f"  Phangan={r['v_phangan_pu']}  Tao={r['v_tao_pu']}")
         print(f"  Bottleneck (HVDC Connector): {r['bottleneck_loading_pct']}%")
         for ln in r["lines"]:
             flag = " ⚡" if ln["loading_percent"] > 100 else ""

@@ -11,7 +11,9 @@ import mlflow
 import mlflow.sklearn
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, r2_score
+from models.mlflow_utils import setup_mlflow
 
+setup_mlflow()
 mlflow.set_experiment("GridTokenX_Hybrid")
 
 ROOT = os.path.dirname(os.path.dirname(__file__))

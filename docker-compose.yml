@@ -1,4 +1,21 @@
 services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gridtokenx_geo}
+      POSTGRES_USER: ${POSTGRES_USER:-gridtokenx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gridtokenx_pass}
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gridtokenx} -d ${POSTGRES_DB:-gridtokenx_geo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.11.3
     ports:
@@ -27,8 +44,12 @@ services:
     environment:
       - KMP_DUPLICATE_LIB_OK=TRUE
       - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - POSTGIS_URL=postgresql://${POSTGRES_USER:-gridtokenx}:${POSTGRES_PASSWORD:-gridtokenx_pass}@postgis:5432/${POSTGRES_DB:-gridtokenx_geo}
     depends_on:
-      - mlflow
+      postgis:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
     restart: unless-stopped
 
   frontend:
@@ -44,3 +65,6 @@ services:
       - api
       - mlflow
     restart: unless-stopped
+
+volumes:
+  postgis_data:

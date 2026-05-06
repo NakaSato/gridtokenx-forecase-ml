@@ -24,12 +24,12 @@ def generate_random_scenario(rng):
 
     # 2. Randomized Contingencies (Failure Probabilities)
     # p_failure per scenario (not per hour)
-    p_fail_hvdc = 0.02    # Mainland-Samui Circuit 3
+    p_fail_hvdc = 0.02    # Mainland-Samui Circuit 2 (Bottleneck)
     p_fail_inter = 0.01   # Samui-Phangan
     p_fail_distal = 0.01  # Phangan-Tao
 
     faults = {
-        "hvdc_c3_fault": rng.random() < p_fail_hvdc,
+        "hvdc_c2_fault": rng.random() < p_fail_hvdc,
         "inter_island_fault": rng.random() < p_fail_inter,
         "distal_fault": rng.random() < p_fail_distal
     }
@@ -58,7 +58,7 @@ def simulate_scenario(scenario_idx, seed):
     # If fault, we effectively lose that supply
     # (Simplified for now: faults trigger local diesel response)
     tao_diesel = 10.0 if sc["assets"]["tao_diesel"] and (sc["faults"]["distal_fault"] or sc["loads"]["tao"] > 8.0) else 0.0
-    samui_diesel = 10.0 if sc["assets"]["samui_diesel"] and (sc["faults"]["hvdc_c3_fault"] or sc["loads"]["samui"] > 90.0) else 0.0
+    samui_diesel = 10.0 if sc["assets"]["samui_diesel"] and (sc["faults"]["hvdc_c2_fault"] or sc["loads"]["samui"] > 90.0) else 0.0
 
     res = verify_dispatch_stability(
         tao_load_mw=sc["loads"]["tao"],
@@ -79,7 +79,7 @@ def simulate_scenario(scenario_idx, seed):
         "v_tao": res.get("v_tao_pu", 0.0),
         "hvdc_loading": res.get("bottleneck_loading_pct", 0.0),
         "survival": survival,
-        "fault_hvdc": sc["faults"]["hvdc_c3_fault"],
+        "fault_hvdc": sc["faults"]["hvdc_c2_fault"],
         "fault_distal": sc["faults"]["distal_fault"]
     }
 

@@ -52,6 +52,10 @@ optimize:
 
 # ── API ───────────────────────────────────────────────────────────────────────
 
+# Start MLflow server locally (port 5000)
+mlflow:
+    mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 0.0.0.0 --port 5000
+
 # Start forecast API (port 8000)
 api:
     {{python}} -m uvicorn api.serve:app --host 0.0.0.0 --port 8000 --reload
@@ -82,6 +86,20 @@ colab-train:
     colab-cli file upload /tmp/gridtokenx.tar.gz /content/gridtokenx.tar.gz
     colab-cli server run bash -lc \
         'mkdir -p /content/gridtokenx && tar -xzf /content/gridtokenx.tar.gz -C /content/gridtokenx && pip install -q lightgbm torch pandas numpy scikit-learn pyarrow pyyaml mlflow optuna && cd /content/gridtokenx && python colab_train.py 2>&1 | tee /tmp/train.log'
+
+# ── PostGIS ────────────────────────────────────────────────────────────────────
+
+# Start PostGIS container only
+postgis-up:
+    docker compose up postgis -d --wait
+
+# Load power_plants GeoJSON into PostGIS
+postgis-load: postgis-up
+    uv run --extra geo python data/load_postgis.py
+
+# Open psql shell into PostGIS
+postgis-shell:
+    docker compose exec postgis psql -U ${POSTGRES_USER:-gridtokenx} -d ${POSTGRES_DB:-gridtokenx_geo}
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 

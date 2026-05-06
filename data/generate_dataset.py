@@ -30,6 +30,8 @@ def _bess_soc(circuit_cap, island_load, bc, n):
     soc = np.zeros(n)
     soc[0] = 0.65
     cap, charge_rate = bc["capacity_mwh"], bc["charge_rate_mw"]
+    if cap <= 0:
+        return soc
     for i in range(1, n):
         delta = circuit_cap[i] - island_load[i]
         if delta > 0:
@@ -39,13 +41,12 @@ def _bess_soc(circuit_cap, island_load, bc, n):
     return soc
 
 
-def generate_ko_tao(idx, dc, bc, rng):
+def generate_ko_tao(idx, dc, bc, rng, assets, global_sim):
     """
     Ko Tao: stable, AC-dominated, nearly flat diurnal.
-    Recalibrated for 15-min intervals.
     """
     n = len(idx)
-    # Continuous hours (0.0 to 23.75)
+    a = assets["ko_tao"]
     hours = idx.hour.to_numpy() + idx.minute.to_numpy() / 60.0
     months = idx.month.to_numpy()
     is_high = np.isin(months, dc["high_season_months"]).astype(float)
@@ -63,27 +64,33 @@ def generate_ko_tao(idx, dc, bc, rng):
         + rng.normal(0, 1.5, n)
     ).clip(dc.get("humidity_min", 74.0), dc.get("humidity_max", 84.0))
 
-    # Recalibrated for 15-min: phi=0.372^(1/4)=0.78, sigma=1.35*0.67=0.91
-    base_load = 6.7 + is_high * dc["high_season_load_shift"]
-    ac_load = np.maximum(0, (temp - dc["ac_threshold_temp"]) * dc["ac_coefficient"])
-    diurnal = 0.08 * np.sin(np.pi * (hours - 10) / 14).clip(0, None)
-    load = (base_load + ac_load + diurnal + _ar1(n, 0.78, 0.91, rng)).clip(
+    # noise params from config
+    phi = global_sim["noise"]["ar1_phi"]
+    sigma = global_sim["noise"]["ar1_sigma"]
+
+    base_load = a["load_base_mw"] + is_high * a["load_seasonal_shift_mw"]
+    ac_load = np.maximum(0, (temp - dc["ac_threshold_temp"]) * a["load_ac_coeff"])
+    diurnal = a["load_diurnal_amp"] * np.sin(np.pi * (hours - 10) / 14).clip(0, None)
+    load = (base_load + ac_load + diurnal + _ar1(n, phi, sigma, rng)).clip(
         dc["load_base_min"], dc["load_base_max"]
     )
 
-    circuit_cap = np.full(n, dc["circuit_cap_max"] * 0.65)
-    btl = np.isin(idx.hour, dc["bottleneck_hours"]) & (rng.random(n) < (0.30 / 4)) # Adjusted prob per step
+    # Phangan -> Tao 33kV XLPE link: Physical absolute max is 16.0 MW
+    max_physical_limit = 16.0
+    circuit_cap = np.full(n, dc.get("circuit_cap_max", 13.3) * 0.65)
+    btl = np.isin(idx.hour, dc["bottleneck_hours"]) & (rng.random(n) < (a["bottleneck_prob"] / 4))
     circuit_cap[btl] = rng.uniform(0.5, 4.9, btl.sum())
-    circuit_cap = (circuit_cap + rng.normal(0, 0.3, n)).clip(0, dc["circuit_cap_max"])
+    circuit_cap = (circuit_cap + rng.normal(0, 0.3, n)).clip(0, max_physical_limit)
 
     return load, temp, humidity, circuit_cap, _bess_soc(circuit_cap, load, bc, n)
 
 
-def generate_ko_phangan(idx, dc, bc, rng):
+def generate_ko_phangan(idx, dc, bc, rng, assets, global_sim):
     """
-    Ko Phangan: moderate tourism volatility. 15-min recalibrated.
+    Ko Phangan: moderate tourism volatility.
     """
     n = len(idx)
+    a = assets["ko_phangan"]
     hours = idx.hour.to_numpy() + idx.minute.to_numpy() / 60.0
     months = idx.month.to_numpy()
     is_high = np.isin(months, dc["high_season_months"]).astype(float)
@@ -101,31 +108,35 @@ def generate_ko_phangan(idx, dc, bc, rng):
         + rng.normal(0, 2.0, n)
     ).clip(70.0, 90.0)
 
-    # 15-min phi=0.8^(1/4)=0.94, sigma scaled
-    base_load = 18.0 + is_high * 3.0
-    ac_load = np.maximum(0, (temp - dc["ac_threshold_temp"]) * 0.8)
-    diurnal = 2.5 * np.sin(np.pi * (hours - 8) / 14).clip(0, None)
+    phi = global_sim["noise"]["ar1_phi"]
+    sigma = global_sim["noise"]["ar1_sigma"]
+
+    base_load = a["load_base_mw"] + is_high * a["load_seasonal_shift_mw"]
+    ac_load = np.maximum(0, (temp - dc["ac_threshold_temp"]) * a["load_ac_coeff"])
+    diurnal = a["load_diurnal_amp"] * np.sin(np.pi * (hours - 8) / 14).clip(0, None)
 
     is_full_moon_night = (rng.random(n) < (1 / (720*4))) & np.isin(idx.hour, [22, 23, 0, 1, 2])
     event_spike = np.where(is_full_moon_night, rng.uniform(2.0, 5.0, n), 0.0)
 
-    load = (base_load + ac_load + diurnal + event_spike + _ar1(n, 0.94, 0.12, rng)).clip(
+    load = (base_load + ac_load + diurnal + event_spike + _ar1(n, phi, sigma, rng)).clip(
         12.0, 30.0
     )
 
-    circuit_cap = np.full(n, 22.0)
-    btl = np.isin(idx.hour, dc["bottleneck_hours"]) & (rng.random(n) < (0.25 / 4))
-    circuit_cap[btl] = rng.uniform(5.0, 12.0, btl.sum())
-    circuit_cap = (circuit_cap + rng.normal(0, 0.5, n)).clip(0, 30.0)
+    # Samui -> Phangan link: 1x 115kV XLPE + 1x 33kV XLPE
+    circuit_cap = np.full(n, 35.0)  # Combined normal capacity
+    btl = np.isin(idx.hour, dc["bottleneck_hours"]) & (rng.random(n) < (a["bottleneck_prob"] / 4))
+    circuit_cap[btl] = rng.uniform(5.0, 15.0, btl.sum())
+    circuit_cap = (circuit_cap + rng.normal(0, 0.5, n)).clip(0, 45.0)
 
     return load, temp, humidity, circuit_cap, _bess_soc(circuit_cap, load, bc, n)
 
 
-def generate_ko_samui(idx, dc, bc, rng):
+def generate_ko_samui(idx, dc, bc, rng, assets, global_sim):
     """
-    Ko Samui: 15-min recalibrated.
+    Ko Samui: high volatility.
     """
     n = len(idx)
+    a = assets["ko_samui"]
     hours = idx.hour.to_numpy() + idx.minute.to_numpy() / 60.0
     months = idx.month.to_numpy()
     is_high = np.isin(months, dc["high_season_months"]).astype(float)
@@ -143,10 +154,12 @@ def generate_ko_samui(idx, dc, bc, rng):
         + rng.normal(0, 2.5, n)
     ).clip(65.0, 92.0)
 
-    # 15-min phi=0.75^(1/4)=0.93
-    base_load = 55.0 + is_high * 12.0
-    ac_load = np.maximum(0, (temp - dc["ac_threshold_temp"]) * 3.5)
-    daytime_peak = 8.0 * np.sin(np.pi * (hours - 8) / 12).clip(0, None)
+    phi = global_sim["noise"]["ar1_phi"]
+    sigma = global_sim["noise"]["ar1_sigma"]
+
+    base_load = a["load_base_mw"] + is_high * a["load_seasonal_shift_mw"]
+    ac_load = np.maximum(0, (temp - dc["ac_threshold_temp"]) * a["load_ac_coeff"])
+    daytime_peak = a["load_diurnal_amp"] * np.sin(np.pi * (hours - 8) / 12).clip(0, None)
     night_entertainment = 3.0 * np.where(np.isin(idx.hour, [20, 21, 22, 23, 0]), 1.0, 0.0)
 
     is_spike = (
@@ -157,15 +170,17 @@ def generate_ko_samui(idx, dc, bc, rng):
 
     load = (
         base_load + ac_load + daytime_peak + night_entertainment
-        + event_spike + _ar1(n, 0.93, 0.45, rng)
+        + event_spike + _ar1(n, phi, sigma, rng)
     ).clip(35.0, 95.0)
 
-    circuit_cap = np.full(n, 80.0)
-    btl = np.isin(idx.hour, dc["bottleneck_hours"]) & (rng.random(n) < (0.40/4))
-    circuit_cap[btl] = rng.uniform(20.0, 50.0, btl.sum())
-    faults = rng.random(n) < (0.005/4)
-    circuit_cap[faults] = rng.uniform(5.0, 20.0, faults.sum())
-    circuit_cap = (circuit_cap + rng.normal(0, 1.0, n)).clip(0, 100.0)
+    # Khanom -> Samui link: 2x 115kV + 2x 33kV
+    circuit_cap = np.full(n, 110.0) # Normal operation
+    # Simulate bottleneck (e.g., loss of one 115kV circuit)
+    btl = np.isin(idx.hour, dc["bottleneck_hours"]) & (rng.random(n) < (a["bottleneck_prob"]/4))
+    circuit_cap[btl] = rng.uniform(30.0, 60.0, btl.sum())
+    faults = rng.random(n) < (0.005/4) # Extreme fault (both 115kV down)
+    circuit_cap[faults] = rng.uniform(10.0, 20.0, faults.sum())
+    circuit_cap = (circuit_cap + rng.normal(0, 1.0, n)).clip(0, 150.0)
 
     return load, temp, humidity, circuit_cap, _bess_soc(circuit_cap, load, bc, n)
 
@@ -173,10 +188,13 @@ def generate_ko_samui(idx, dc, bc, rng):
 def generate(cfg):
     dc = cfg["data"]
     bc = cfg["bess"]
+    cluster = cfg["cluster"]
+    assets = cluster["assets"]
+    sim = cluster["simulation"]
     rng = np.random.default_rng(42)
 
     # Capturing 2024-2026 commissioning and modern growth
-    idx = pd.date_range(dc["start_date"], dc["end_date"], freq="15min")
+    idx = pd.date_range(dc["start_date"], dc["end_date"], freq=dc.get("frequency", "15min"))
     n = len(idx)
     
     # ── Thai Holidays (Songkran Stress Test) ──────────────────────────────────
@@ -211,21 +229,22 @@ def generate(cfg):
     tourist_index = (0.6 + 0.3 * is_high + 0.05 * rng.standard_normal(n)).clip(0.2, 1.0)
 
     # Per-island generation
-    tao_load,     tao_temp,     tao_hum,     tao_cap,     tao_soc     = generate_ko_tao(idx, dc, bc, rng)
-    phangan_load, phangan_temp, phangan_hum, phangan_cap, phangan_soc = generate_ko_phangan(idx, dc, bc, rng)
-    samui_load,   samui_temp,   samui_hum,   samui_cap,   samui_soc   = generate_ko_samui(idx, dc, bc, rng)
+    tao_load,     tao_temp,     tao_hum,     tao_cap,     tao_soc     = generate_ko_tao(idx, dc, bc, rng, assets, sim)
+    phangan_load, phangan_temp, phangan_hum, phangan_cap, phangan_soc = generate_ko_phangan(idx, dc, bc, rng, assets, sim)
+    samui_load,   samui_temp,   samui_hum,   samui_cap,   samui_soc   = generate_ko_samui(idx, dc, bc, rng, assets, sim)
 
     # ── Holiday Spikes ──
-    # Songkran causes dramatic shifts on tourist islands (+25% spike)
-    holiday_factor = np.where(is_songkran, 1.25, 1.0)
-    # Other holidays +10%
-    holiday_factor = np.where(is_holiday & ~is_songkran, 1.10, holiday_factor)
+    # Songkran causes dramatic shifts on tourist islands
+    hf = sim["holiday_factors"]
+    holiday_factor = np.where(is_songkran, hf["songkran"], 1.0)
+    holiday_factor = np.where(is_holiday & ~is_songkran, hf["default"], holiday_factor)
 
     # ── Modern Grid Trends (2024-2026) ────────────────────────────────────────
     years = idx.year.to_numpy()
-    ev_factor = np.where(years >= 2024, 1.0 + (years - 2023) * 0.025, 1.0)
+    tr = sim["trends"]
+    ev_factor = np.where(years >= 2024, 1.0 + (years - 2023) * tr["ev_annual_growth"], 1.0)
     is_daytime = (idx.hour >= 9) & (idx.hour <= 16)
-    solar_factor = np.where((years >= 2024) & is_daytime, 1.0 - (years - 2023) * 0.015, 1.0)
+    solar_factor = np.where((years >= 2024) & is_daytime, 1.0 - (years - 2023) * tr["solar_annual_offset"], 1.0)
     
     final_factor = ev_factor * solar_factor * holiday_factor
     

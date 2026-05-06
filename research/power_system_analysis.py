@@ -32,11 +32,10 @@ def analyze_power_system():
             
             # 1. Voltage Profile
             buses = net.res_bus
-            v_tao = buses.at[5, "vm_pu"] # Ko Tao 20kV bus (index might vary, using name lookup is safer)
             # Find bus by name
             b_tao = net.bus[net.bus.name == "Ko Tao 20kV"].index[0]
             b_phangan = net.bus[net.bus.name == "Phangan 20kV"].index[0]
-            b_samui = net.bus[net.bus.name == "Samui 110kV"].index[0]
+            b_samui = net.bus[net.bus.name == "Samui Station Phanom - Samui"].index[0]
             
             v_tao = buses.at[b_tao, "vm_pu"]
             v_phangan = buses.at[b_phangan, "vm_pu"]
@@ -44,9 +43,10 @@ def analyze_power_system():
 
             # 2. Line Loading
             lines = net.res_line
-            # Bottleneck C3 is line index 1
-            load_c3 = lines.at[1, "loading_percent"]
-            # Phangan-Tao link is line index 4
+            # Bottleneck C2 is now the primary constraint
+            l_c2 = net.line[net.line.name == "HVDC C2 (Bottleneck)"].index[0]
+            load_c2 = lines.at[l_c2, "loading_percent"]
+            # Phangan-Tao link lookup by name
             l_pt = net.line[net.line.name == "Phangan-Tao 33kV Link"].index[0]
             load_pt = lines.at[l_pt, "loading_percent"]
             flow_pt = abs(lines.at[l_pt, "p_from_mw"])
@@ -56,7 +56,7 @@ def analyze_power_system():
                 "V_Samui": round(v_samui, 4),
                 "V_Phangan": round(v_phangan, 4),
                 "V_Tao": round(v_tao, 4),
-                "C3_Load%": round(load_c3, 1),
+                "C2_Load%": round(load_c2, 1),
                 "TaoLink_MW": round(flow_pt, 2),
                 "TaoLink_Load%": round(load_pt, 1)
             })
@@ -80,7 +80,7 @@ def analyze_power_system():
     # 4. Thermal Bottleneck Analysis
     print("\n[3] THERMAL BOTTLENECK ANALYSIS")
     peak = next(r for r in results if r["Scenario"] == "PEAK LOAD (Songkran)")
-    print(f"  • Circuit 3 (Bottleneck) Loading: {peak['C3_Load%']}%")
+    print(f"  • Circuit 2 (Bottleneck) Loading: {peak['C2_Load%']}%")
     print(f"  • Phangan-Tao 33kV Link Flow:    {peak['TaoLink_MW']} MW (Limit: 16 MW)")
     
     if peak['TaoLink_MW'] > 16.0:

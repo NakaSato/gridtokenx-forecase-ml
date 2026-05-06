@@ -24,9 +24,9 @@ def create_pypsa_network(
           p_nom_extendable=True, carrier="AC")
 
     # ── Lines & Constraints ──────────────────────────────────────────────────
-    # Mainland -> Samui (Circuit 3 Bottleneck)
-    n.add("Line", "HVDC_C2", bus0="Khanom", bus1="Samui", r=0.047*23.4, x=0.1*23.4, s_nom=100)
-    n.add("Line", "HVDC_C3_Bottleneck", bus0="Khanom", bus1="Samui", r=0.047*23.4, x=0.1*23.4, s_nom=100)
+    # Mainland -> Samui (Circuit 2 Bottleneck)
+    n.add("Line", "HVDC_C3", bus0="Khanom", bus1="Samui", r=0.047*23.4, x=0.1*23.4, s_nom=100)
+    n.add("Line", "HVDC_C2_Bottleneck", bus0="Khanom", bus1="Samui", r=0.047*23.4, x=0.1*23.4, s_nom=100)
 
     # Samui -> Phangan (Radial)
     # Define transformer with reactance (x) and resistance (r)
@@ -63,10 +63,10 @@ def run_pypsa_analysis(tao_load_mw=7.0, phangan_load_mw=20.0, samui_load_mw=65.0
         n.lpf()
         
         # Extract Results
-        flow_hvdc = n.lines_t.p0.loc["now", "HVDC_C3_Bottleneck"] if "now" in n.lines_t.p0.index else n.lines_t.p0.iloc[0]["HVDC_C3_Bottleneck"]
+        flow_hvdc = n.lines_t.p0.loc["now", "HVDC_C2_Bottleneck"] if "now" in n.lines_t.p0.index else n.lines_t.p0.iloc[0]["HVDC_C2_Bottleneck"]
         flow_tao  = n.lines_t.p0.loc["now", "Phangan_Tao_Link"] if "now" in n.lines_t.p0.index else n.lines_t.p0.iloc[0]["Phangan_Tao_Link"]
         
-        loading_hvdc = abs(flow_hvdc) / n.lines.loc["HVDC_C3_Bottleneck", "s_nom"] * 100
+        loading_hvdc = abs(flow_hvdc) / n.lines.loc["HVDC_C2_Bottleneck", "s_nom"] * 100
         loading_tao  = abs(flow_tao) / n.lines.loc["Phangan_Tao_Link", "s_nom"] * 100
         
         return {

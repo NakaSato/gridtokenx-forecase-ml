@@ -68,6 +68,9 @@ class TestRunDispatch:
 
     def test_bess_charges_during_surplus(self, sample_load_24h, sample_circuit_no_bottleneck, cfg):
         """During surplus (circuit > load), BESS should charge (negative bess_mw)."""
+        if cfg["bess"]["capacity_mwh"] <= 0:
+            pytest.skip("BESS capacity is zero — skip charging test")
+        
         schedule = run_dispatch(sample_load_24h, sample_circuit_no_bottleneck,
                                 initial_soc=0.30, cfg=cfg)
         # At least some hours should show charging
@@ -82,13 +85,21 @@ class TestRunDispatch:
         assert len(diesel_hours) > 0, "Diesel never fires despite large deficit"
 
     def test_diesel_at_optimal_output(self, high_deficit_load, low_circuit, cfg):
-        """When diesel fires, it should run at optimal_output_mw (7.5 MW)."""
+        """When diesel fires, it should prioritize optimal_output_mw (7.5 MW) if BESS available."""
         schedule = run_dispatch(high_deficit_load, low_circuit, cfg=cfg)
         opt_mw = cfg["diesel"]["optimal_output_mw"]
+        has_bess = cfg["bess"]["capacity_mwh"] > 0
+        
         for s in schedule:
             if s.diesel_mw > 0:
-                assert s.diesel_mw <= opt_mw + 0.001, \
-                    f"Diesel {s.diesel_mw} exceeds optimal {opt_mw}"
+                if has_bess:
+                    # With BESS, diesel should stay near optimal
+                    assert s.diesel_mw <= opt_mw + 0.001, \
+                        f"Diesel {s.diesel_mw} exceeds optimal {opt_mw} with BESS available"
+                else:
+                    # Without BESS, diesel must cover the full deficit up to rated
+                    delta = s.load_mw - s.circuit_mw
+                    assert s.diesel_mw >= min(delta, cfg["diesel"]["rated_mw"]) - 0.001
 
     def test_fuel_positive_when_diesel_on(self, high_deficit_load, low_circuit, cfg):
         """Fuel consumption must be > 0 whenever diesel is running."""

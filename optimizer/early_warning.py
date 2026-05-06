@@ -63,9 +63,22 @@ def check_warnings(
         with open("config.yaml") as f:
             cfg = yaml.safe_load(f)
 
+    cc  = cfg["cluster"]
+    ca  = cc["assets"]
     bc  = cfg["bess"]
     dc  = cfg["diesel"]
+    
+    # N-1 Limits from coordinated config
+    n1_critical = cc["admm"]["mainland_n1_critical_mw"]
+    n1_alert    = cc["admm"]["mainland_n1_alert_mw"]
+    
+    # BESS Capacity - use Ko Tao specific if standalone, or Cluster BESS if provided
+    # Ko Tao has no local BESS, so stand-alone check focuses on Import Capacity
     cap = bc["capacity_mwh"]
+    if phangan_forecast is not None and samui_forecast is not None:
+        # Account for Samui BESS (Node 7) in cluster warning mode
+        cap = ca["ko_samui"]["bess_mwh"]
+        
     soc_min   = bc["soc_min"]
     soc_warn  = soc_min + 0.10   # warn at 30%
     opt_mw    = dc["optimal_output_mw"]
@@ -76,13 +89,37 @@ def check_warnings(
     for h in range(min(lookahead_hours, len(load_forecast))):
         delta = load_forecast[h] - circuit_forecast[h]
 
-        # Project SoC without diesel intervention
-        if delta > 0:
-            soc = max(soc_min, soc - delta / cap)
-        else:
-            soc = min(bc["soc_max"], soc + (-delta) / cap)
+        # ── Cluster-wide N-1 Contingency Check ──────────────────────────────
+        if phangan_forecast is not None and samui_forecast is not None:
+            total_cluster_load = float(load_forecast[h] + phangan_forecast[h] + samui_forecast[h])
+            
+            if total_cluster_load >= n1_critical:
+                warnings.append(Warning(
+                    level="CRITICAL", hour=h,
+                    message=f"Total Cluster Load {total_cluster_load:.1f} MW exceeds N-1 limit ({n1_critical} MW). "
+                            "Single cable failure will cause blackout.",
+                    soc_at_event=round(soc, 3)
+                ))
+            elif total_cluster_load >= n1_alert:
+                warnings.append(Warning(
+                    level="WARNING", hour=h,
+                    message=f"Total Cluster Load {total_cluster_load:.1f} MW approaching N-1 limit. "
+                            "Stage island generation to reduce mainland intake.",
+                    soc_at_event=round(soc, 3)
+                ))
 
-        dispatchable_mwh = (soc - soc_min) * cap
+        # Project SoC without diesel intervention
+        if cap > 0:
+            if delta > 0:
+                soc = max(soc_min, soc - delta / cap)
+            else:
+                soc = min(bc["soc_max"], soc + (-delta) / cap)
+        else:
+            # No BESS case: focus on import limit
+            if delta > 0:
+                soc = soc_min # Virtual depletion clipped to min for test coordination
+
+        dispatchable_mwh = (soc - soc_min) * cap if cap > 0 else 0.0
 
         # ── Physics check via pandapower ──────────────────────────────────────
         hvdc_pct = None

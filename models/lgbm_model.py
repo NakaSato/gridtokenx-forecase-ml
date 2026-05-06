@@ -6,6 +6,9 @@ Output: models/lgbm.pkl
 import os
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
 import pickle
 import numpy as np
 import pandas as pd
@@ -14,7 +17,9 @@ import yaml
 import mlflow
 import mlflow.sklearn
 from sklearn.metrics import mean_absolute_error, r2_score
+from models.mlflow_utils import setup_mlflow
 
+setup_mlflow()
 mlflow.set_experiment("GridTokenX_LGBM")
 
 FEATURES = [

@@ -45,83 +45,112 @@ def run_dispatch(
     dt = 1.0 / sph
     curve = {float(k): v for k, v in dc["bsfc_curve"].items()}
 
-    cap_mwh   = max(1e-6, bc["capacity_mwh"]) # Prevent zero division
+    cap_mwh   = max(1e-6, bc["capacity_mwh"])
     soc_min   = bc["soc_min"]
     soc_max   = bc["soc_max"]
-    rated_mw  = dc["rated_mw"]
-    opt_mw    = dc["optimal_output_mw"]   # 7.5 MW
-    diesel_kg = oc["diesel_price_per_kg"]
-    carbon_kg = oc["carbon_price_per_kg"]
+    
+    # 5 x 2MW Configuration
+    num_units = 5
+    unit_rating = 2.0
+    p_min_unit = 0.5 # Min load per 2MW unit
 
     schedule = []
     soc = initial_soc
 
     for h, (load, circuit) in enumerate(zip(load_forecast, circuit_forecast)):
-        delta = load - circuit   # positive = deficit, negative = surplus
+        delta = load - circuit   # positive = deficit
 
         diesel_mw = 0.0
-        bess_mw   = 0.0         # discharge (+) / charge (-)
+        bess_mw   = 0.0
+        units_active = 0
 
         if delta <= 0:
             # Surplus: charge BESS
-            charge = min(-delta, bc["charge_rate_mw"],
-                         (soc_max - soc) * cap_mwh / dt)
+            charge = min(-delta, bc["charge_rate_mw"], (soc_max - soc) * cap_mwh / dt)
             bess_mw = -charge
-        elif delta <= opt_mw:
-            # BESS covers deficit alone
-            discharge = min(delta, bc["charge_rate_mw"], (soc - soc_min) * cap_mwh / dt)
-            bess_mw = discharge
-            if discharge < delta:
-                # BESS limited — fire diesel for remainder
-                remainder = delta - discharge
-                diesel_mw = min(rated_mw, max(remainder, 0))
         else:
-            # Large deficit: diesel at optimal + BESS for remainder
-            diesel_mw = opt_mw
-            net_after_diesel = delta - diesel_mw
-            if net_after_diesel > 0:
-                discharge = min(net_after_diesel, bc["charge_rate_mw"], (soc - soc_min) * cap_mwh / dt)
-                bess_mw = discharge
-                if discharge < net_after_diesel:
-                    # Still deficit -> crank diesel to rated
-                    diesel_mw = min(rated_mw, diesel_mw + (net_after_diesel - discharge))
-            else:
-                # Diesel overproduces → recharge BESS
-                excess = -net_after_diesel
-                charge = min(excess, bc["charge_rate_mw"],
-                             (soc_max - soc) * cap_mwh / dt)
-                bess_mw = -charge
+            # Deficit: Lowest Cost Priority (Diesel vs BESS)
+            bess_avail_mw = min(bc["charge_rate_mw"], (soc - soc_min) * cap_mwh / dt)
+            
+            # 1. Calculate marginal BESS cost
+            depth = soc_max - soc_min
+            deg_per_mwh = oc["bess_degradation_cost_per_cycle"] / (cap_mwh * depth) if cap_mwh > 0 else 9999.0
+            cost_bess_per_mw = deg_per_mwh * dt
+            
+            # 2. Calculate marginal Diesel cost
+            # Assume 1 unit running at required load (or p_min_unit if small)
+            test_diesel_mw = max(delta, p_min_unit)
+            lf = test_diesel_mw / unit_rating
+            sfc = _bsfc(lf, curve)
+            fuel_kg_per_h = sfc * test_diesel_mw
+            cost_per_kg = oc["diesel_price_per_kg"] + 2.68 * oc["carbon_price_per_kg"]
+            cost_diesel_per_mw = (fuel_kg_per_h * cost_per_kg * dt) / test_diesel_mw
 
-        # Update SoC: delta energy = bess_mw * dt
+            if cost_bess_per_mw <= cost_diesel_per_mw and bess_avail_mw > 0:
+                # BESS is cheaper or Diesel is off
+                bess_mw = min(delta, bess_avail_mw)
+                diesel_mw = delta - bess_mw
+                
+                # Check minimum diesel load constraint
+                if 0 < diesel_mw < p_min_unit:
+                    # If remaining is too small for diesel, try to push more to BESS if capable
+                    # Otherwise, force diesel to min load and charge BESS with excess
+                    diesel_mw = p_min_unit
+                    excess = diesel_mw - (delta - bess_mw)
+                    bess_mw -= excess
+            else:
+                # Diesel is cheaper
+                units_active = int(np.ceil(delta / unit_rating))
+                units_active = min(units_active, num_units)
+                max_gen = units_active * unit_rating
+                
+                diesel_mw = min(delta, max_gen)
+                bess_mw = delta - diesel_mw
+                
+                # Minimum load constraint
+                if diesel_mw > 0 and diesel_mw < units_active * p_min_unit:
+                    diesel_mw = units_active * p_min_unit
+                    bess_mw = delta - diesel_mw
+                    
+                # BESS bounds check if BESS is forced to discharge
+                if bess_mw > bess_avail_mw:
+                    bess_mw = bess_avail_mw
+                    diesel_mw = delta - bess_mw
+                    
+            units_active = int(np.ceil(diesel_mw / unit_rating)) if diesel_mw > 0 else 0
+
+        # Update SoC
         soc = np.clip(soc - (bess_mw * dt) / cap_mwh, soc_min, soc_max)
 
-        # Fuel & carbon (scale by dt)
-        lf = diesel_mw / rated_mw if diesel_mw > 0 else 0.0
-        sfc = _bsfc(lf, curve) if lf > 0 else 0.0          # g/kWh
-        fuel_kg = (sfc * diesel_mw / 1000.0) * dt           # kg per step
-        co2_kg  = fuel_kg * 2.68                            # diesel CO2 factor
+        # Fuel (Unit-aware BSFC)
+        fuel_kg = 0.0
+        if units_active > 0 and diesel_mw > 0:
+            lf = (diesel_mw / units_active) / unit_rating
+            sfc = _bsfc(lf, curve)
+            fuel_kg = (sfc * diesel_mw) * dt
 
         schedule.append(HourlyDispatch(
             hour=h, load_mw=round(load, 3), circuit_mw=round(circuit, 3),
             diesel_mw=round(diesel_mw, 3), bess_mw=round(bess_mw, 3),
             bess_soc=round(soc, 4), fuel_kg=round(fuel_kg, 3),
-            carbon_kg=round(co2_kg, 3),
+            carbon_kg=round(fuel_kg * 2.68, 3),
         ))
 
     return schedule
 
 
 def schedule_summary(schedule: List[HourlyDispatch]) -> dict:
-    total_fuel   = sum(s.fuel_kg   for s in schedule)
-    total_carbon = sum(s.carbon_kg for s in schedule)
-    diesel_hours = sum(1 for s in schedule if s.diesel_mw > 0)
-    avg_diesel   = np.mean([s.diesel_mw for s in schedule])
-    avg_bess     = np.mean([s.bess_mw for s in schedule if s.bess_mw > 0]) if any(s.bess_mw > 0 for s in schedule) else 0
+    if not schedule: return {}
+    total_fuel = sum(s.fuel_kg for s in schedule)
+    unit_rating = 2.0
+    step_plan = [int(np.ceil(s.diesel_mw / unit_rating)) if s.diesel_mw > 0 else 0 for s in schedule]
+    
     return {
-        "total_fuel_kg":   round(total_fuel, 2),
-        "total_carbon_kg": round(total_carbon, 2),
-        "diesel_hours":    diesel_hours,
-        "bess_soc_final":  schedule[-1].bess_soc,
+        "total_fuel_kg": round(total_fuel, 2),
+        "diesel_hours": sum(1 for s in schedule if s.diesel_mw > 0),
+        "max_units_active": max(step_plan) if step_plan else 0,
+        "step_plan_units": step_plan,
+        "bess_soc_final": schedule[-1].bess_soc,
     }
 
 

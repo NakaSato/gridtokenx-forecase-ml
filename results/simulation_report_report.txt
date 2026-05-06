@@ -1,0 +1,25 @@
+====================================================
+       GRIDCAPTURX: DECISION INTELLIGENCE REPORT    
+====================================================
+
+Solution Summary:
+GridCapturX เสนอ Decision Intelligence Platform ที่รวม Hybrid AI/ML
+(TCN + LightGBM + Ridge Meta-Learner) สำหรับ Forecast 24 ชม. (MAPE ≤ 10%)
++ MILP Optimizer สำหรับ Recommended Schedule + pandapower Physics Validator
++ Gemma 4 Cognitive Layer (Apache 2.0, on-prem ready) สำหรับ explainable
+recommendation, SOP-aware validation, และ actionable Early Warning
+ที่ลด workload P1 และตอบ 'จุดคุ้มค่า' ของ P2 ผ่าน Cost Curve Visualizer
++ Counterfactual Comparison
+
+Validation Result:
+- Total Observations: 2791
+- Mean Absolute Error (MAE): 0.2480 MW
+- Root Mean Squared Error (RMSE): 0.3386 MW
+- Mean Absolute Percentage Error (MAPE): 3.1717%
+- PEA Compliance (MAPE ≤ 10%): PASSED
+
+- Total Fuel Consumed: 0.00 kg
+- BESS Final SoC: 0.0%
+
+Report Generated at: Wed May  6 22:47:15 2026
+CSV Data stored at: results/simulation_report.csv

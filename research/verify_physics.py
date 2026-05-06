@@ -1,84 +1,88 @@
-"""
-Stress-to-Collapse Physics Audit — Ko Tao-Phangan-Samui Cluster
-Identifies physical safety boundaries (Voltage & Thermal) for the 2026 grid.
-"""
-import pandapower as pp
-import numpy as np
+import os
+import geopandas as gpd
 import pandas as pd
-from research.pandapower_model import create_ko_tao_network
-from research.pypsa_model import run_pypsa_analysis
+from shapely.geometry import Point
 
-def run_physics_audit():
-    print("="*80)
-    print("  GRIDTOKENX: STRESS-TO-COLLAPSE PHYSICS AUDIT (2026 GRID)")
-    print("="*80)
+# Constants for analysis
+KO_TAO_CENTER = Point(99.84, 10.08)
+SEARCH_RADIUS_DEG = 1.2
+UTM_THAILAND = "EPSG:32647"
 
-    # ── 1. TAO RADIAL LINK SWEEP (Finding distal collapse point) ──
-    print("\n[1] DISTAL LINK SWEEP: Ko Tao Load Sensitivity")
-    tao_loads = np.arange(2.0, 20.1, 2.0)
-    audit_data = []
+# Electrical Parameters for 115 kV XLPE Submarine Cable (approximate)
+# Based on typical 630mm2 Cu conductor
+R_OHM_PER_KM = 0.05  # Resistance
+X_OHM_PER_KM = 0.12  # Reactance
+V_NOMINAL_KV = 115.0
 
-    for load in tao_loads:
-        net = create_ko_tao_network(tao_load_mw=load, phangan_load_mw=20.0, samui_load_mw=65.0)
-        try:
-            pp.runpp(net, algorithm="nr")
-            v_tao = net.res_bus.iloc[-1]["vm_pu"] # Tao Distal Bus
-            loading = net.res_line[net.line.name == "Phangan-Tao 33kV Link"]["loading_percent"].iloc[0]
-            
-            status = "OK"
-            if v_tao < 0.95: status = "VOLTAGE LOW ⚠️"
-            if loading > 100: status = "THERMAL LIMIT ⚡"
-            
-            audit_data.append({
-                "Tao_Load_MW": load, "V_Tao": v_tao, "Link_Load%": loading, "Status": status
-            })
-        except Exception:
-            audit_data.append({
-                "Tao_Load_MW": load, "V_Tao": 0.0, "Link_Load%": 0.0, "Status": "COLLAPSE ❌"
-            })
+# Load Scenarios (MW)
+PEAK_LOAD_SAMUI_MW = 95.0
+PEAK_LOAD_PHANGAN_MW = 26.0
+PEAK_LOAD_TAO_MW = 7.7
 
-    df_tao = pd.DataFrame(audit_data)
-    print(df_tao.to_string(index=False))
+def estimate_losses():
+    print("╔══════════════════════════════════════════════════════════════════════╗")
+    print("║          GridTokenX — Electrical Loss & Impedance Analysis           ║")
+    print("╚══════════════════════════════════════════════════════════════════════╝")
 
-    # ── 2. HVDC BOTTLENECK SWEEP (Finding cluster import limit) ──
-    print("\n[2] CLUSTER BOTTLENECK SWEEP: Mainland Circuit 3 Limit")
-    samui_sweeps = [60, 80, 100, 120]
-    hvdc_data = []
+    line_files = [
+        "data/geojson/egat_lines.geojson",
+        "data/geojson/koh_samui_grid_infrastructure.geojson",
+        "frontend/public/ko_tao_network.geojson"
+    ]
     
-    for s_load in samui_sweeps:
-        # Cross-verify with Pandapower (AC) and PyPSA (Linear)
-        net_pp = create_ko_tao_network(tao_load_mw=8.0, phangan_load_mw=22.0, samui_load_mw=s_load)
-        res_py = run_pypsa_analysis(tao_load_mw=8.0, phangan_load_mw=22.0, samui_load_mw=s_load)
+    all_lines = []
+    
+    for f in line_files:
+        if not os.path.exists(f): continue
+        gdf = gpd.read_file(f)
+        lines = gdf[gdf.geometry.type.isin(['LineString', 'MultiLineString'])]
+        if lines.empty: continue
+        if lines.crs is None: lines.set_crs(epsg=4326, inplace=True)
         
-        try:
-            pp.runpp(net_pp)
-            pp_c3 = net_pp.res_line.iloc[1]["loading_percent"]
-            hvdc_data.append({
-                "Samui_Load": s_load, "PP_C3_Load%": round(pp_c3, 1), 
-                "PyPSA_C3_Load%": res_py.get("hvdc_loading_pct"),
-                "Diff%": round(abs(pp_c3 - res_py.get("hvdc_loading_pct", 0)), 2)
-            })
-        except:
-            pass
+        # Re-project for distance
+        lines_utm = lines.to_crs(UTM_THAILAND)
+        lines['length_km'] = lines_utm.geometry.length / 1000.0
+        
+        for _, row in lines.iterrows():
+            name = row.get('name') or row.get('line_name') or row.get('name_e') or "Unnamed"
+            voltage = str(row.get('voltage_kv') or row.get('voltage') or "115")
             
-    df_hvdc = pd.DataFrame(hvdc_data)
-    print(df_hvdc.to_string(index=False))
+            # Skip very short segments (noise)
+            if row['length_km'] < 0.1: continue
+            
+            # Map voltage string to float
+            v_kv = 115.0
+            if "230" in voltage: v_kv = 230.0
+            elif "22" in voltage and "115" not in voltage: v_kv = 22.0
+            
+            # Calculate Impedance
+            r_total = R_OHM_PER_KM * row['length_km']
+            
+            # Loss estimation: P_loss = 3 * I^2 * R
+            # Assume 50 MW throughput for transmission lines as a baseline
+            p_flow_mw = 50.0
+            if "Samui" in str(name): p_flow_mw = PEAK_LOAD_SAMUI_MW
+            if "Tao" in str(name): p_flow_mw = PEAK_LOAD_TAO_MW
+            
+            # I = P / (sqrt(3) * V * pf) -- assume power factor 0.95
+            i_amps = (p_flow_mw * 1e6) / (1.732 * v_kv * 1e3 * 0.95)
+            p_loss_kw = (3 * (i_amps**2) * r_total) / 1000.0
+            
+            all_lines.append({
+                "Link": name[:30],
+                "V (kV)": v_kv,
+                "Length (km)": round(row['length_km'], 2),
+                "R (Ω)": round(r_total, 3),
+                "Est. Loss (kW)": round(p_loss_kw, 2),
+                "% Loss": round((p_loss_kw / (p_flow_mw * 1000)) * 100, 3) if p_flow_mw > 0 else 0
+            })
 
-    # ── 3. SAFETY ENVELOPE SUMMARY ──
-    print("\n[3] PHYSICAL SAFETY ENVELOPE (Operational Limits)")
+    df = pd.DataFrame(all_lines).drop_duplicates(subset=["Link", "Length (km)"])
+    print(df.sort_values("Est. Loss (kW)", ascending=False).to_string(index=False))
     
-    # Extract collapse point
-    collapse_row = df_tao[df_tao["Status"].str.contains("COLLAPSE|THERMAL|LOW")].iloc[0]
-    
-    print(f"  • Max Passive Load (Tao): {collapse_row['Tao_Load_MW'] - 2.0} MW")
-    print(f"  • Active Constraint (Tao): {collapse_row['Status']}")
-    print(f"  • Bottleneck (HVDC):      Circuit 3 thermal limit (100 MW)")
-    print(f"  • Voltage Regulation:     Double-Stationed AVR (Phangan + Tao)")
-    
-    print("\n"+"="*80)
-    print("  VERIFICATION COMPLETE: Physics model confirms 16 MW distal limit.")
-    print("="*80)
+    total_loss = df["Est. Loss (kW)"].sum()
+    print(f"\nTotal estimated cluster transmission loss: {total_loss/1000:.3f} MW")
+    print("\nNote: Losses are estimated at peak load assuming 115kV XLPE cable specs.")
 
 if __name__ == "__main__":
-    import warnings; warnings.filterwarnings("ignore")
-    run_physics_audit()
+    estimate_losses()

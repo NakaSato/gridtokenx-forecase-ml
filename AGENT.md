@@ -6,7 +6,7 @@ AI agent context for the Ko Tao-Phangan-Samui Predictive Intelligence codebase.
 
 ## Project Purpose
 
-Physics-informed AI forecasting and dispatch system for three islanded microgrids connected to the Thai mainland via 115 kV XLPE submarine cables. Primary target: Ko Tao load forecast (MAPE < 2.65%). Secondary: multi-island ADMM dispatch optimization.
+Physics-informed AI forecasting and dispatch system for three islanded microgrids connected to the Thai mainland via 115 kV XLPE submarine cables. Primary target: Ko Tao load forecast (MAPE < 10%, historically < 3% on synthetic benchmarks). Secondary: multi-island ADMM dispatch optimization. Ko Tao has **no BESS** — diesel-only dispatch.
 
 ---
 
@@ -14,14 +14,14 @@ Physics-informed AI forecasting and dispatch system for three islanded microgrid
 
 | Layer | Technology |
 |---|---|
-| Language | Python 3.11 (uv + venv) |
+| Language | Python 3.11 (`uv` + venv) |
 | ML | PyTorch (TCN), LightGBM, scikit-learn (Ridge meta-learner) |
 | Hyperparameter search | Optuna |
 | Experiment tracking | MLflow (SQLite backend, `mlflow.db`) |
+| Grid physics | pandapower, PyPSA |
 | API | FastAPI + uvicorn |
-| Grid physics | pandapower |
 | Task runner | `just` (see `justfile`) |
-| Frontend | Next.js 15, TypeScript, Tailwind, Recharts, Mapbox |
+| Frontend | Next.js 16, TypeScript, Tailwind CSS 4, Recharts, Leaflet/Mapbox |
 | Containerization | Docker + docker-compose |
 
 ---
@@ -29,15 +29,32 @@ Physics-informed AI forecasting and dispatch system for three islanded microgrid
 ## Key Commands
 
 ```bash
+just setup         # uv sync
 just generate      # regenerate synthetic dataset (data/generate_dataset.py)
 just preprocess    # feature engineering → train/val/test parquets
-just train         # lgbm → tcn → hybrid pipeline
+just train         # preprocess → lgbm → tcn → hybrid pipeline
+just lgbm          # train LightGBM only
+just tcn           # train TCN only
+just hybrid        # train meta-learner only
 just eval          # evaluate forecast + dispatch vs PEA targets
-just tune          # Optuna hyperparameter search
+just tune          # Optuna hyperparameter search (default 50 trials)
+just optimize      # PEA MILP dispatch optimization (7-day test)
 just api           # start FastAPI on :8000
-just simulate      # replay test.parquet through live API
+just frontend      # start Next.js dashboard on :3000
+just dev           # start full dev stack (API + Frontend concurrently)
+just simulate      # replay test data through live API, print live metrics
 just pea-onboard   # calibrate to real PEA SCADA CSV
-just up            # docker-compose up (API + frontend)
+just pea-backtest  # read-only backtest on PEA data (no refit)
+just up / just down # docker-compose up/down (API + frontend + MLflow)
+
+# 2026 Strategy & Commissioning
+just backtest-12m      # 12-month backtest (May 2025 – Apr 2026)
+just stress-test       # N-1 contingency stress test
+just cluster-test      # Cluster-wide ADMM bottleneck test
+just stochastic-test   # Monte Carlo stochastic resilience (N=500)
+just opf-test          # Optimal Power Flow analysis
+just diagnose          # holistic diagnostic report
+just report            # run all commissioning tests + generate dashboard
 ```
 
 ---
@@ -45,16 +62,26 @@ just up            # docker-compose up (API + frontend)
 ## Architecture
 
 ```
-data/generate_dataset.py   → island_grid.parquet  (3-island synthetic, calibrated)
-data/preprocess.py         → train/val/test.parquet + scaler.pkl
-models/lgbm_model.py       → models/lgbm.pkl
-models/tcn_model.py        → models/tcn.pt
-models/hybrid_pipeline.py  → models/meta_learner.pkl
-evaluate.py                → results/evaluation_report.json
-api/serve.py               → POST /stream/telemetry, /forecast, /warnings
-optimizer/early_warning.py → check_warnings() — uses pandapower AC power flow
-optimizer/admm_resilience.py → multi-island consensus dispatch
+data/generate_dataset.py    → data/processed/island_grid.parquet  (3-island synthetic, calibrated)
+data/preprocess.py          → train/val/test.parquet + scaler.pkl
+models/lgbm_model.py        → models/lgbm.pkl
+models/tcn_model.py         → models/tcn.pt
+models/hybrid_pipeline.py   → models/meta_learner.pkl
+evaluate.py                 → results/evaluation_report.json
+optimizer/run_optimization.py → results/pea_optimization_report.json
+api/serve.py                → POST /stream/telemetry, /forecast, /warnings + GET /health, /metrics
+optimizer/early_warning.py  → check_warnings() — uses pandapower AC power flow
+optimizer/admm_resilience.py → multi-island ADMM consensus dispatch
+optimizer/pea_dispatch_opt.py → HiGHS MILP dispatch optimizer
+optimizer/isca.py           → ISCA metaheuristic optimizer
 research/pandapower_model.py → 6-bus 115 kV physics model
+research/pypsa_model.py     → PyPSA linear power flow analysis
+research/backtest_12m.py    → 12-month rolling backtest
+research/contingency_analysis.py → N-1 contingency stress test
+research/cluster_stress_test.py  → multi-island ADMM bottleneck test
+research/monte_carlo_engine.py   → stochastic resilience (N=500)
+research/optimal_power_flow.py   → OPF analysis
+research/diagnose_grid.py       → holistic grid diagnostics
 ```
 
 ---
@@ -82,7 +109,9 @@ Engineered features (added by `preprocess.py`):
 - `Load_Roll_Mean_3h/6h`, `Load_Roll_Std_3h/6h`
 - `Heat_Index` = Dry_Bulb_Temp × Rel_Humidity / 100
 - `Temp_Roll_Mean_3h/6h`, `Humid_Roll_Mean_3h/6h`, `Temp_Gradient`
-- `Hour_of_Day`, `Day_of_Week`, `Is_High_Season`
+- `Hour_of_Day`, `Day_of_Week`, `Is_High_Season`, `Is_Thai_Holiday`, `Is_Songkran`
+- `Max_Capacity_MW`, `Headroom_MW`
+- Cluster spatial lags: `Phangan_Load_Lag_1h`, `Phangan_Load_Roll_Mean_3h/6h`, `Samui_Load_Lag_1h`, `Samui_Load_Roll_Mean_3h/6h`
 
 **Scaling:** StandardScaler on weather/exogenous only. Load, lags, rolling load, calendar flags excluded.
 
@@ -121,24 +150,26 @@ Shunt reactors: Samui dist 15 Mvar, Phangan 22 Mvar, Ko Tao 28 Mvar.
 
 ---
 
-## Performance Targets (PEA)
+## Performance Targets (PEA — from config.yaml)
 
-| Metric | Target | Last result |
-|---|---|---|
-| MAPE | < 2.65% | 1.67% |
-| R² | > 0.97 | 0.977 |
-| MAE | < 0.25 MW | 0.128 MW |
-| Fuel savings | > 22% | 89.25% (synthetic) |
+| Metric | Target | 
+|---|---|
+| MAPE | < 10.0% |
+| R² | > 0.85 |
+| MAE | < 0.75 MW |
+| Fuel savings | > 22% |
 
 ---
 
 ## Real Data Status
 
 - `data/processed/ko_tao_grid_2023_locked.parquet` — real Ko Tao proxy (calibrated from KIREIP + OpenMeteo)
-- `data/processed/ko_tao_grid_calibrated.parquet` — 5-year calibrated synthetic
-- `data/raw/kireip_proxy.parquet` — King Island BESS-Diesel proxy
+- `data/processed/ko_tao_grid_calibrated.parquet` — multi-year calibrated synthetic
+- `data/raw/kireip_proxy.parquet` — King Island BESS-Diesel proxy (used by `optimizer/run_optimization.py`)
 - `data/raw/nrel_perform/` — NREL BA-level solar/wind/load actuals 2018
 - `data/raw/public_datasets/` — district microgrid load+weather (US, 2012)
+- `data/raw/ko_tao_network.geojson` — Ko Tao network topology for map visualization
+- `data/raw/raw_tourism_samui.csv` — Samui tourism seasonality data
 - Real PEA SCADA: **not yet integrated** — requires MOU with PEA
 
 ---
@@ -151,10 +182,28 @@ Shunt reactors: Samui dist 15 Mvar, Phangan 22 Mvar, Ko Tao 28 Mvar.
 | POST | `/stream/actual` | Record actual vs forecast → updates live MAPE |
 | GET | `/stream/metrics` | Live MAE/RMSE/MAPE |
 | POST | `/forecast` | Batch 24h forecast (requires full 48h history) |
-| POST | `/warnings` | Early warning check (6h lookahead) |
+| POST | `/warnings` | Early warning check (6h lookahead, pandapower AC power flow) |
 | GET | `/health` | Liveness + buffer status |
+| GET | `/metrics` | Last `evaluation_report.json` |
 
-Streaming buffer: 48-row in-memory deque. **Lost on restart** (Task 3: persist to SQLite).
+Streaming state: `StreamingEngine` persists telemetry buffer and metrics to SQLite (`api_state.db`), surviving API restarts.
+
+---
+
+## Frontend (Next.js 16)
+
+App Router pages under `frontend/src/app/`:
+- `/dashboard` — main overview
+- `/forecast` — forecast visualization
+- `/map` — geographic map view (Leaflet/Mapbox)
+- `/meter` — smart meter simulator
+- `/resilience` — resilience analysis
+- `/topology` — grid topology viewer
+- `/vpp` — virtual power plant
+- `/lpc` — load profile charts
+- `/adr` — automated demand response
+
+Components: `dashboard/`, `console/`, `maps/`, `meters/`, `simulator/`, `providers/` (NetworkProvider, SimulatorProvider), `ui/` (GlobalNav, shared UI).
 
 ---
 
@@ -202,21 +251,19 @@ colab-cli server rm gridtokenx
 
 ---
 
+## Known Issues / TODO
 
-
-1. **Retrain on calibrated data** — models trained on wrong synthetic params (temp 24–36°C, carbon 600 g/kWh). New calibrated data: temp 25.8–28.9°C, carbon 400–484 g/kWh.
-2. **Add Phangan/Samui lags as LightGBM features** — cluster columns now in parquet, not yet in FEATURES list.
-3. **Persist streaming buffer** — `StreamingEngine` state lost on API restart.
-4. **N-1 contingency dispatch** — pandapower model ready; ADMM not yet fed with contingency scenarios.
-5. **No API authentication** — all endpoints open.
-6. **No drift detection** — model accuracy degrades silently after deployment.
+1. **No API authentication** — all endpoints open.
+2. **No drift detection** — model accuracy degrades silently after deployment.
+3. **Real PEA SCADA not integrated** — requires MOU with PEA. Onboarding pipeline ready (`just pea-onboard`).
 
 ---
 
 ## Conventions
 
 - Use `just` recipes, not raw `python` calls.
-- Val/test always come from real data (`ko_tao_grid_2023_locked.parquet`). Synthetic only augments training (20% sample).
+- Val/test always come from real data (`ko_tao_grid_2023_locked.parquet`) when available. Synthetic only augments training.
 - Cluster columns (`Phangan_*`, `Samui_*`) are excluded from StandardScaler — only present in synthetic training rows.
+- LightGBM FEATURES list now includes cluster spatial lags (`Phangan_Load_Lag_1h`, `Samui_Load_Lag_1h`, etc.) — missing columns are zero-filled gracefully.
+- MLflow experiment names: `GridTokenX_LGBM` (LightGBM training), `GridTokenX_API` (serving), `GridTokenX` (general training).
 - Do not push directly to `main`. Do not use `git push --force`.
-- MLflow experiment name: `GridTokenX_API` (serving), `GridTokenX` (training).

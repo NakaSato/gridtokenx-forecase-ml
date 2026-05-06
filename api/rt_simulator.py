@@ -73,23 +73,28 @@ def circuit_forecast_for(idx, df: pd.DataFrame, pos: int) -> list:
 
 
 def print_header():
-    print(f"\n{'─'*80}")
+    print(f"\n{'─'*120}")
     print(f"  {'Step':>5}  {'Timestamp':<20}  {'Actual':>7}  {'Forecast':>8}  "
-          f"{'Error':>7}  {'MAE':>7}  {'RMSE':>7}  {'MAPE%':>7}")
-    print(f"{'─'*80}")
+          f"{'Error':>7}  {'MAPE%':>7}  {'SoC':>7}  {'Units':>6}  {'Fuel':>10}  {'Loss(MW)':>8}")
+    print(f"{'─'*120}")
 
 
 def print_row(step, ts, actual, forecast, metrics):
     err = actual - forecast
-    mae  = metrics.get("mae")  or "—"
-    rmse = metrics.get("rmse") or "—"
     mape = metrics.get("mape") or "—"
-    mae_s  = f"{mae:.4f}"  if isinstance(mae,  float) else mae
-    rmse_s = f"{rmse:.4f}" if isinstance(rmse, float) else rmse
+    
+    grid = metrics.get("grid_status", {})
+    soc = grid.get("bess", {}).get("soc_pct", 0)
+    fuel = grid.get("diesel", {}).get("total_fuel_kg", 0)
+    units = grid.get("diesel", {}).get("units_active", 0)
+    loss = grid.get("line_losses_mw", 0)
+    
     mape_s = f"{mape:.4f}" if isinstance(mape, float) else mape
     print(f"  {step:>5}  {str(ts):<20}  {actual:>7.3f}  {forecast:>8.3f}  "
-          f"{err:>+7.3f}  {mae_s:>7}  {rmse_s:>7}  {mape_s:>7}")
+          f"{err:>+7.3f}  {mape_s:>7}  {soc:>6.1f}%  {units:>6}  {fuel:>8.1f}kg  {loss:>8.4f}")
 
+
+import csv
 
 def main():
     parser = argparse.ArgumentParser()
@@ -97,7 +102,14 @@ def main():
                         help="Seconds between rows (0 = fast replay)")
     parser.add_argument("--rows", type=int, default=200,
                         help="Number of rows to stream")
+    parser.add_argument("--output", type=str, default="results/simulation_report.csv",
+                        help="Path to save CSV report")
     args = parser.parse_args()
+
+    # Create results dir if needed
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    
+    # ... API check logic ...
 
     # Check API is up
     try:
@@ -116,58 +128,86 @@ def main():
     last_forecast: list = []   # most recent 24h forecast
     forecast_step = 0          # which step of the forecast we're comparing
 
-    print_header()
+    # CSV Header
+    csv_headers = [
+        "timestamp", "actual_mw", "forecast_mw", "error_mw", "mape_pct", 
+        "bess_soc_pct", "units_active", "fuel_kg", "line_loss_mw"
+    ]
+    
+    with open(args.output, "w", newline="") as f_csv:
+        writer = csv.writer(f_csv)
+        writer.writerow(csv_headers)
 
-    for i in range(n_rows):
-        row = df.iloc[i]
-        ts  = df.index[i]
-        h   = ts.hour
+        print_header()
 
-        # Build telemetry payload
-        tel = row_to_telemetry(row)
-
-        # Once buffer will be full, attach lgbm_features + circuit_forecast
-        payload = {"row": tel}
-        if i >= WINDOW - 1:
-            payload["lgbm_features"]    = lgbm_features_for(row)
-            payload["circuit_forecast"] = circuit_forecast_for(df.index, df, i)
-
-        # POST telemetry
-        resp = requests.post(f"{API}/stream/telemetry", json=payload, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-
-        # If a new forecast was returned, reset comparison window
-        if data.get("status") == "forecast":
-            last_forecast = data["forecast_mw"]
-            forecast_step = 0
-
-        # POST actual vs forecast (once we have a forecast to compare)
-        actual = float(row["Island_Load_MW"])
-        if last_forecast and forecast_step < len(last_forecast):
-            fc_val = last_forecast[forecast_step]
-            act_payload = {
-                "timestamp_iso":   ts.isoformat(),
-                "actual_load_mw":  actual,
-                "forecast_load_mw": fc_val,
-            }
-            ar = requests.post(f"{API}/stream/actual", json=act_payload, timeout=5)
-            ar.raise_for_status()
-            metrics = ar.json()["metrics"]
+        for i in range(n_rows):
+            row = df.iloc[i]
+            ts  = df.index[i]
             
-            # Reduce printing if speed is 0 (fast replay)
-            if args.speed > 0 or i % 100 == 0 or i == n_rows - 1:
-                print_row(i, ts, actual, fc_val, metrics)
-            
-            forecast_step += 1
-        else:
-            # Still filling buffer — just show actual, no forecast yet
-            if i % 50 == 0:
-                print(f"  {i:>5}  {str(ts):<20}  {actual:>7.3f}  "
-                      f"{'(buffering)':>8}  {'—':>7}  {'—':>7}  {'—':>7}  {'—':>7}")
+            # ... payload building ...
+            tel = row_to_telemetry(row)
+            payload = {"row": tel}
+            if i >= WINDOW - 1:
+                payload["lgbm_features"]    = lgbm_features_for(row)
+                payload["circuit_forecast"] = circuit_forecast_for(df.index, df, i)
 
-        if args.speed > 0:
-            time.sleep(args.speed)
+            resp = requests.post(f"{API}/stream/telemetry", json=payload, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("status") == "forecast":
+                last_forecast = data["forecast_mw"]
+                forecast_step = 0
+
+            actual = float(row["Island_Load_MW"])
+            fc_val = 0.0
+            metrics = {}
+
+            if last_forecast and forecast_step < len(last_forecast):
+                fc_val = last_forecast[forecast_step]
+                act_payload = {
+                    "timestamp_iso": ts.isoformat(),
+                    "actual_load_mw": actual,
+                    "forecast_load_mw": fc_val,
+                }
+                ar = requests.post(f"{API}/stream/actual", json=act_payload, timeout=5)
+                ar.raise_for_status()
+                metrics = ar.json()["metrics"]
+                
+                if args.speed > 0 or i % 100 == 0 or i == n_rows - 1:
+                    print_row(i, ts, actual, fc_val, metrics)
+                
+                forecast_step += 1
+            else:
+                metrics = requests.get(f"{API}/stream/metrics").json()
+                if i % 50 == 0:
+                    grid = data.get("grid_status", {}) or {}
+                    soc = grid.get("bess", {}).get("soc_pct", 0)
+                    units = grid.get("diesel", {}).get("units_active", 0)
+                    fuel = grid.get("diesel", {}).get("total_fuel_kg", 0)
+                    loss = grid.get("line_losses_mw", 0.0)
+                    print(f"  {i:>5}  {str(ts):<20}  {actual:>7.3f}  "
+                          f"{'(buffering)':>8}  {'—':>7}  {'—':>7}  {soc:>6.1f}%  {units:>6}  {fuel:>8.1f}kg  {loss:>8.4f}")
+
+            # Write to CSV
+            grid = metrics.get("grid_status", {})
+            writer.writerow([
+                ts.isoformat(),
+                actual,
+                fc_val if fc_val > 0 else None,
+                actual - fc_val if fc_val > 0 else None,
+                metrics.get("mape"),
+                grid.get("bess", {}).get("soc_pct"),
+                grid.get("diesel", {}).get("units_active"),
+                grid.get("diesel", {}).get("total_fuel_kg"),
+                grid.get("line_losses_mw")
+            ])
+            f_csv.flush()
+
+            if args.speed > 0:
+                time.sleep(args.speed)
+
+    # Final summary ...
 
     # Final summary
     final = requests.get(f"{API}/stream/metrics").json()
@@ -178,7 +218,34 @@ def main():
     print(f"  MAPE = {final['mape']:.4f}%     (MAPE = (1/N)Σ|error/actual|×100)")
     pea_ok = final['mape'] <= 10.0
     print(f"  PEA ≤10% MAPE: {'PASS ✅' if pea_ok else 'FAIL ❌'}")
-    print(f"{'═'*80}\n")
+    print(f"{'═'*80}")
+
+    # Generate GridCapturX Solution Report
+    report_path = args.output.replace(".csv", "_report.txt")
+    with open(report_path, "w") as f_rep:
+        f_rep.write("====================================================\n")
+        f_rep.write("       GRIDCAPTURX: DECISION INTELLIGENCE REPORT    \n")
+        f_rep.write("====================================================\n\n")
+        f_rep.write("Solution Summary:\n")
+        f_rep.write("GridCapturX เสนอ Decision Intelligence Platform ที่รวม Hybrid AI/ML\n")
+        f_rep.write("(TCN + LightGBM + Ridge Meta-Learner) สำหรับ Forecast 24 ชม. (MAPE ≤ 10%)\n")
+        f_rep.write("+ MILP Optimizer สำหรับ Recommended Schedule + pandapower Physics Validator\n")
+        f_rep.write("+ Gemma 4 Cognitive Layer (Apache 2.0, on-prem ready) สำหรับ explainable\n")
+        f_rep.write("recommendation, SOP-aware validation, และ actionable Early Warning\n")
+        f_rep.write("ที่ลด workload P1 และตอบ 'จุดคุ้มค่า' ของ P2 ผ่าน Cost Curve Visualizer\n")
+        f_rep.write("+ Counterfactual Comparison\n\n")
+        f_rep.write(f"Validation Result:\n")
+        f_rep.write(f"- Total Observations: {final['n']}\n")
+        f_rep.write(f"- Mean Absolute Error (MAE): {final['mae']:.4f} MW\n")
+        f_rep.write(f"- Root Mean Squared Error (RMSE): {final['rmse']:.4f} MW\n")
+        f_rep.write(f"- Mean Absolute Percentage Error (MAPE): {final['mape']:.4f}%\n")
+        f_rep.write(f"- PEA Compliance (MAPE ≤ 10%): {'PASSED' if pea_ok else 'FAILED'}\n\n")
+        f_rep.write(f"- Total Fuel Consumed: {final.get('grid_status', {}).get('diesel', {}).get('total_fuel_kg', 0):.2f} kg\n")
+        f_rep.write(f"- BESS Final SoC: {final.get('grid_status', {}).get('bess', {}).get('soc_pct', 0):.1f}%\n")
+        f_rep.write(f"\nReport Generated at: {time.ctime()}\n")
+        f_rep.write(f"CSV Data stored at: {args.output}\n")
+    
+    print(f"✅ Simulation complete. Report saved to: {report_path}")
 
 
 if __name__ == "__main__":
