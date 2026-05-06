@@ -14,6 +14,7 @@ env/
 .coverage
 htmlcov/
 .tox/
+*.db
 
 # ML artifacts (Recursive)
 **/*.pkl
