@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function proxy(request: NextRequest) {
+export default function proxy(request: NextRequest) {
   const token = request.cookies.get('gtx-auth-token')?.value;
   const { pathname } = request.nextUrl;
 
@@ -34,6 +34,10 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run middleware on all routes except static assets and API auth routes
-  matcher: ['/((?!api/auth|_next/static|_next/image|favicon.ico).*)'],
+  // Match all request paths except for the ones starting with:
+  // - api (API routes) - excluding api/auth which we handle differently
+  // - _next/static (static files)
+  // - _next/image (image optimization files)
+  // - favicon.ico (favicon file)
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)', '/api/auth/:path*'],
 };

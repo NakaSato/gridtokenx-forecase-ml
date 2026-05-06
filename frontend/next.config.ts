@@ -2,7 +2,6 @@ import path from "path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   // Proxy API and WS to backend (matches Vite dev proxy)
   async rewrites() {
     const simulatorUrl = process.env.SIMULATOR_URL || "http://localhost:8082";
@@ -30,10 +29,6 @@ const nextConfig: NextConfig = {
       path.resolve(__dirname, "node_modules"),
       "node_modules",
     ];
-    // Prevent webpack from resolving modules outside the frontend directory.
-    // Without this, the parent package.json causes tailwindcss to be resolved
-    // from the wrong root (which has no node_modules).
-    config.resolve.roots = [__dirname];
     return config;
   },
 

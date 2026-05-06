@@ -118,7 +118,7 @@ spatial_fidelity:
   transmission_grid:
     khanom_to_samui:
       circuits_115kv: 2 # One of these is a known bottleneck
-      circuits_33kv: 2
+      circuits_33kv: 3 # 3x 33kV XLPE/Oil submarine cables
     samui_to_phangan:
       circuits_115kv: 1
       circuits_33kv: 1
@@ -192,9 +192,9 @@ cluster:
     max_iter: 50
     rho: 0.1
     tolerance: 0.001
-    mainland_n1_limit_mw: 160.8
-    mainland_n1_alert_mw: 145.0
-    mainland_n1_critical_mw: 160.8
+    mainland_n1_limit_mw: 180.0  # 1x 115kV (105MW) + 3x 33kV (75MW)
+    mainland_n1_alert_mw: 160.0
+    mainland_n1_critical_mw: 65.0 # Critical bottleneck (e.g. multiple circuit faults)
 
 targets:
   mape: 10.0
