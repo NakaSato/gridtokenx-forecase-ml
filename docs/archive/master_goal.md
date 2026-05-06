@@ -8,7 +8,7 @@ The cluster utilizes a mix of centralized generation, energy storage, and mainla
 
 ### 2. Transmission Hierarchy and Circuits
 The system is divided into two primary voltage levels:
-*   **115 kV System (Red Lines):** This represents the high-voltage backbone. The main circuit from the mainland is the **115 kV KMB (Circuit 3)**, supplemented by the **115 kV KMA (Circuit 2)**.
+*   **115 kV System (Red Lines):** This represents the high-voltage backbone. The main circuit from the mainland is the **115 kV KMA (Circuit 2)**, supplemented by the **115 kV KMB (Circuit 3)**.
 *   **33 kV System (Blue Lines):** Used for intra-island distribution and the final connection to Ko Tao. This includes specialized **33 kV Oil-Filled** (Item 4) and **33 kV XLPE** cables.
 
 ### 3. Critical Constraints: The "Bottom Neck"

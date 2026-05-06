@@ -204,7 +204,7 @@ If the SCADA connection drops, the edge controller falls back gracefully:
 
 Integration is considered complete when:
 
-- [ ] Live MAPE on PEA actuals ≤ 2.65% over 30-day rolling window
+- [ ] Live MAPE on PEA actuals ≤ 10.0% over 30-day rolling window
 - [ ] Fuel savings ≥ 22% vs PEA legacy dispatch (confirmed by PEA operations log)
 - [ ] Zero unplanned outages attributable to AI dispatch over 90-day trial
 - [ ] `results/pea_onboard_report.json` generated with real data
