@@ -38,6 +38,7 @@ SPH  = 4 if FREQ == "15min" else 1
 WINDOW = CFG["model"]["tcn"]["window_size"] 
 CAP_MAX = CFG["data"]["circuit_cap_max"]
 BOTTLENECK_HOURS = CFG["data"]["bottleneck_hours"]
+STRESS_MULTIPLIER = float(os.getenv("STRESS_MULTIPLIER", 1.0))
 
 
 def circuit_for_hour(h: int) -> float:
@@ -143,6 +144,10 @@ def main():
         for i in range(n_rows):
             row = df.iloc[i]
             ts  = df.index[i]
+            
+            # Apply dynamic stress multiplier for demo purposes
+            actual = float(row["Island_Load_MW"]) * STRESS_MULTIPLIER
+            row["Island_Load_MW"] = actual
             
             # ... payload building ...
             tel = row_to_telemetry(row)

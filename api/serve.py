@@ -164,6 +164,10 @@ class AgentExecutiveReportRequest(BaseModel):
     backtest_logs: dict
 
 
+class AgentGridStatusRequest(BaseModel):
+    grid_status: dict
+
+
 from api.grid_core import IslandGrid
 
 # ── Streaming state ───────────────────────────────────────────────────────────
@@ -255,11 +259,16 @@ class StreamingEngine:
             "mae": round(mae, 4), 
             "rmse": round(rmse, 4), 
             "mape": round(mape, 4),
+            "error_history": err[-24:].tolist(), # Last 24 samples for trend plotting
             "grid_status": grid_status
         }
 
 
-STREAM = StreamingEngine(tc["window_size"], os.path.join(ROOT, "api_state.db"), CFG)
+# ── Initialize Engine ────────────────────────────────────────────────────────
+IS_VERCEL = os.getenv("VERCEL") == "1"
+DB_PATH = "/tmp/api_state.db" if IS_VERCEL else os.path.join(ROOT, "api_state.db")
+
+STREAM = StreamingEngine(tc["window_size"], DB_PATH, CFG)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -460,7 +469,11 @@ def forecast(req: ForecastRequest):
     return {"forecast_mw": fc, "summary": schedule_summary(schedule)}
 
 
-from agent.use_cases import generate_decision_explanation, generate_action_plan, generate_forecast_narrative, generate_executive_report
+from agent.use_cases import (
+    generate_decision_explanation, generate_action_plan, 
+    generate_forecast_narrative, generate_executive_report,
+    generate_grid_status_explanation
+)
 
 @app.post("/agent/explain-dispatch")
 def agent_explain_dispatch(req: AgentExplainRequest):
@@ -496,6 +509,15 @@ def agent_executive_report(req: AgentExecutiveReportRequest):
         return {"report": report}
     except Exception as e:
         raise HTTPException(500, f"Gemma executive report failed: {str(e)}")
+
+
+@app.post("/agent/grid-status")
+def agent_grid_status(req: AgentGridStatusRequest):
+    try:
+        explanation = generate_grid_status_explanation(req.grid_status)
+        return {"explanation": explanation}
+    except Exception as e:
+        raise HTTPException(500, f"Gemma grid status failed: {str(e)}")
 
 
 if __name__ == "__main__":

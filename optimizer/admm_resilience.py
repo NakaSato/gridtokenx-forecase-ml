@@ -15,25 +15,19 @@ class IslandNode:
         self.u = 0.0         # Dual variable
 
     def optimize_local(self, p_avg, u, rho):
-        # Target export to help balance global mismatch
-        # Local mismatch is self.gen - self.load
-        local_mismatch = self.gen - self.load
-        
-        # Target: maximize help to cluster while staying within limits
-        target = local_mismatch - (p_avg - u)
+        # Target: move towards the global consensus p_avg, adjusted by dual u
+        target = p_avg - u
         
         # Physical constraints (Net Export/Import limits)
-        # Net Export = (Gen + Diesel + BESS_disc) - Load
-        # Net Import = Load + BESS_char - (Gen + Diesel_min)
         bess_rate = self.bess_cap / 2.0
-        max_net_export = (self.gen + self.diesel_cap + bess_rate) - self.load
-        max_net_import = (self.load + bess_rate) - self.gen
+        max_p_export = (self.gen + self.diesel_cap + bess_rate) - self.load
+        min_p_export = self.gen - (self.load + bess_rate)
         
         # Apply transmission limits (net flow limits)
-        max_net_export = min(max_net_export, self.tx_export_limit)
-        max_net_import = min(max_net_import, self.tx_import_limit)
+        max_p_export = min(max_p_export, self.tx_export_limit)
+        min_p_export = max(min_p_export, -self.tx_import_limit)
         
-        self.p_export = np.clip(target, -max_net_import, max_net_export)
+        self.p_export = np.clip(target, min_p_export, max_p_export)
         return self.p_export
 
 def run_admm_consensus(nodes, max_iter=50, rho=0.1, tolerance=0.001, **kwargs):
@@ -51,7 +45,8 @@ def run_admm_consensus(nodes, max_iter=50, rho=0.1, tolerance=0.001, **kwargs):
         p_avg_new = np.mean(p_vals)
         
         # 3. Update Dual Variables
-        for node in nodes:
+        for node, p_val in zip(nodes, p_vals):
+            node.p_export = p_val
             node.u += (node.p_export - p_avg_new)
             
         # Check convergence
@@ -75,9 +70,9 @@ if __name__ == "__main__":
     phangan = IslandNode("Ko Phangan", local_load=25.0, renewable_gen=ca["ko_phangan"]["renewable_mw"], bess_cap=ca["ko_phangan"]["bess_mwh"], diesel_cap=ca["ko_phangan"]["diesel_mw"], tx_import_limit=45.0)
     samui = IslandNode("Ko Samui",    local_load=90.0, renewable_gen=ca["ko_samui"]["renewable_mw"],   bess_cap=ca["ko_samui"]["bess_mwh"],   diesel_cap=ca["ko_samui"]["diesel_mw"])
     
-    mainland_limit = cc["admm"].get("mainland_n1_limit_mw", 65.0)
-    # Simulate an N-1 event where mainland is severely bottlenecked (65 MW)
-    mainland = IslandNode("Mainland", local_load=0.0, renewable_gen=65.0, bess_cap=0.0, diesel_cap=0.0, tx_export_limit=65.0)
+    mainland_limit = cc["admm"].get("mainland_n1_critical_mw", 65.0)
+    # Mainland budget provider. Allowed to export [0, mainland_limit].
+    mainland = IslandNode("Mainland", local_load=0.0, renewable_gen=0.0, bess_cap=0.0, diesel_cap=mainland_limit, tx_export_limit=mainland_limit, tx_import_limit=0.0)
     
     nodes = [tao, phangan, samui, mainland]
     print(f"--- Multi-Island Resilience ADMM (Cluster: {cc['islands']} + Mainland) ---")

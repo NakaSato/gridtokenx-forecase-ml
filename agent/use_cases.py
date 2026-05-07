@@ -11,7 +11,7 @@ def generate_decision_explanation(optimized_schedule: dict, baseline_schedule: d
         "You are Gemma 4, an AI operator assistant for the Ko Tao power grid. "
         "Your job is to compare an optimized dispatch schedule against a baseline "
         "and concisely explain the fuel savings in liters and the operational reasons. "
-        "Use Thai language for the operator."
+        "Use Thai language for the operator. Use a polite and professional tone."
     )
     
     prompt = f"""
@@ -108,4 +108,18 @@ def generate_executive_report(backtest_logs: dict) -> str:
     5. Deployment Timeline & ROI
     """
     
+    return gemma_client.generate(prompt=prompt, system_instruction=system_prompt)
+    
+
+def generate_grid_status_explanation(grid_status: dict) -> str:
+    """
+    Analyzes current grid stability and headroom.
+    """
+    system_prompt = (
+        "You are Gemma 4, an AI operator assistant for the Ko Tao power grid. "
+        "Analyze the current real-time grid status (headroom, frequency, voltage stability) "
+        "and provide a quick status report in Thai. Highlight any immediate risks."
+    )
+    
+    prompt = f"CURRENT GRID STATUS:\n{json.dumps(grid_status, indent=2)}"
     return gemma_client.generate(prompt=prompt, system_instruction=system_prompt)

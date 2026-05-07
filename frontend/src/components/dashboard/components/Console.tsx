@@ -46,10 +46,12 @@ export const Console = memo(({ logs, onClear }: ConsoleProps) => {
                                 </div>
                             ) : (
                                 <span className={cn(
-                                    log.type === 'error' && "text-rose-400",
+                                    log.type === 'error' && "text-rose-400 font-bold",
                                     log.type === 'warning' && "text-amber-400",
                                     log.type === 'success' && "text-emerald-400",
-                                    log.type === 'info' && "text-blue-400"
+                                    log.type === 'info' && "text-blue-400",
+                                    log.type === 'gemma' && "text-emerald-400 italic",
+                                    log.type === 'milp' && "text-indigo-400 font-medium"
                                 )}>
                                     {log.message}
                                 </span>

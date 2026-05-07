@@ -15,7 +15,7 @@ env/
 htmlcov/
 .tox/
 *.db
-
+/graphify-out/*
 # ML artifacts (Recursive)
 **/*.pkl
 **/*.pt
@@ -70,3 +70,4 @@ yarn-error.log*
 # Misc
 *.log
 # uv.lock  # Committed by convention for apps, uncomment if this is a library
+api_state.db

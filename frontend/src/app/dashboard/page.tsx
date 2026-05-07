@@ -16,8 +16,8 @@ import { usePagination } from '@/hooks/usePagination';
 
 import { DashboardHeader } from '@/components/dashboard/components/DashboardHeader';
 import { GridControls } from '@/components/dashboard/components/GridControls';
-import { Console } from '@/components/dashboard/components/Console';
 import { Pagination } from '@/components/dashboard/components/Pagination';
+import { GemmaAgent } from '@/components/agent/GemmaAgent';
 
 import { DEFAULT_METER_COUNT, DEFAULT_ITEMS_PER_PAGE_GRID } from '@/lib/constants';
 import { calculateEnergyMW, cn } from '@/lib/common';
@@ -70,7 +70,7 @@ const Dashboard = () => {
                 <StatCard title="Grid Generation" value={totalGenMW.toFixed(3)} unit="MW" icon={<Sun className="text-emerald-400" />} color="emerald" />
                 <StatCard title="Grid Consumption" value={totalConsMW.toFixed(3)} unit="MW" icon={<Zap className="text-blue-400" />} color="blue" />
                 <StatCard title="Net Flow" value={totalSurpMW.toFixed(3)} unit="MW" icon={<Activity className="text-purple-400" />} color="purple" />
-                <StatCard title="Stability Score" value={(analytics?.health_score ?? 98.2).toFixed(1)} unit="%" icon={<Activity className="text-rose-400" />} color="rose" />
+                <StatCard title="Stability Score" value={(analytics?.mape ? Math.max(0, 100 - analytics.mape) : 98.2).toFixed(1)} unit="%" icon={<Activity className="text-rose-400" />} color="rose" />
             </section>
 
             <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -140,6 +140,11 @@ const Dashboard = () => {
                     <Pagination currentPage={currentPage} totalPages={totalPages} startIndex={startIndex} endIndex={endIndex} totalItems={totalItems} onPageChange={goToPage} onPrevPage={prevPage} onNextPage={nextPage} />
                 </div>
                 <aside className="space-y-6">
+                    <GemmaAgent 
+                        type="incident" 
+                        data={analytics?.grid_status} 
+                        className="shadow-emerald-500/5"
+                    />
                     <Console logs={logs} onClear={clearLogs} />
                 </aside>
             </main>

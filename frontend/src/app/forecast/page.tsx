@@ -5,6 +5,7 @@ import { Activity, AlertTriangle, CheckCircle, Zap } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
+import { GemmaAgent } from '@/components/agent/GemmaAgent';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export default function ForecastPage() {
   const [forecast, setForecast] = useState<ForecastResult | null>(null);
   const [metrics, setMetrics] = useState<MetricsResult | null>(null);
   const [warnings, setWarnings] = useState<Warning[]>([]);
+  const [lgbmFeatures, setLgbmFeatures] = useState<any>(null);
 
   async function fetchMetrics() {
     try {
@@ -137,6 +139,7 @@ export default function ForecastPage() {
       }
       const fcData: ForecastResult = await fcRes.json();
       setForecast(fcData);
+      setLgbmFeatures(lgbm_features);
 
       // Fetch warnings
       const warnRes = await fetch('/api/gridtokenx/warnings', {
@@ -253,6 +256,12 @@ export default function ForecastPage() {
                 </div>
               ))}
             </div>
+
+            {/* Gemma Insight */}
+            <GemmaAgent 
+              type="forecast" 
+              data={{ forecast_mw: forecast.forecast_mw, lgbm_features: lgbmFeatures }} 
+            />
 
             {/* Chart */}
             <div className="bg-gray-900 rounded-xl p-5">
