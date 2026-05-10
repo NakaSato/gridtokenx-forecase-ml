@@ -46,6 +46,10 @@ train: preprocess lgbm tcn hybrid
 eval:
     {{python}} research/evaluate.py
 
+# 12-month backtest (May 2025 – Apr 2026)
+backtest-12m:
+    {{python}} research/backtest_pea.py --months 12
+
 # Run Coordinated Cluster MILP dispatch optimization (7-day test)
 optimize:
     {{python}} optimizer/run_optimization.py
@@ -58,7 +62,7 @@ mlflow:
 
 # Start forecast API (port 8000)
 api:
-    {{python}} -m uvicorn api.serve:app --host 0.0.0.0 --port 8000 --reload
+    {{python}} -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Start frontend (port 3000)
 frontend:
@@ -67,7 +71,7 @@ frontend:
 # Start full dev stack (API + Frontend)
 dev:
     @echo "🚀 Starting GridTokenX Dev Stack..."
-    (trap 'kill 0' SIGINT; {{python}} -m uvicorn api.serve:app --port 8000 --reload & cd frontend && npm run dev)
+    (trap 'kill 0' SIGINT; {{python}} -m uvicorn api.main:app --port 8000 --reload & cd frontend && npm run dev)
 
 # Stream test data through API and print live RMSE/MAE/MAPE
 simulate rows="200":

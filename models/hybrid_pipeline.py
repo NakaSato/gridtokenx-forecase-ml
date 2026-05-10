@@ -11,10 +11,7 @@ import mlflow.sklearn
 from sklearn.linear_model import Ridge
 from models.mlflow_utils import setup_mlflow
 
-setup_mlflow()
-mlflow.set_experiment("GridTokenX_Hybrid")
-
-ROOT = os.path.dirname(os.path.dirname(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 TARGETS = ["tao_load_mw", "cable_flow_mw", "kmb_flow_mw"]
@@ -53,7 +50,7 @@ np.save({repr(out_path)}, preds)
 def get_tcn_preds(ckpt, df, device):
     import torch
     from torch.utils.data import DataLoader
-    from models.tcn_model import TCN, WindowDataset, SEQ_FEATURES
+    from models.tcn_model import TCN, WindowDataset
     tc = ckpt["config"]
     window, horizon = tc["window_size"], tc["forecast_horizon"]
     n_targets = ckpt.get("n_targets", 3)
@@ -75,38 +72,38 @@ def get_tcn_preds(ckpt, df, device):
     return aligned
 
 
-def main():
-    import torch
-    from models.device import get_device
-
-    device = get_device()
-    print(f"Using device: {device}")
-
-    ckpt = torch.load("models/tcn.pt", map_location=device, weights_only=False)
-
-    val  = pd.read_parquet("data/processed/val.parquet")
-    test = pd.read_parquet("data/processed/test.parquet")
+def train_meta_learner(val_df: pd.DataFrame, test_df: pd.DataFrame, ckpt: dict, device: str):
+    """Core meta-learner training logic."""
+    setup_mlflow()
+    mlflow.set_experiment("GridTokenX_Hybrid")
 
     # LightGBM predictions
     with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as f: val_npy = f.name
     with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as f: test_npy = f.name
 
     print("Running LightGBM predictions (subprocess)...")
-    lgbm_predict_subprocess("data/processed/val.parquet",  val_npy)
-    lgbm_predict_subprocess("data/processed/test.parquet", test_npy)
+    # We write temporary parquets if dfs are not already on disk, 
+    # but here we assume the paths provided in main are used or we write them.
+    val_df.to_parquet(val_npy + ".parquet")
+    test_df.to_parquet(test_npy + ".parquet")
+    
+    lgbm_predict_subprocess(val_npy + ".parquet",  val_npy)
+    lgbm_predict_subprocess(test_npy + ".parquet", test_npy)
+    
     lgbm_val  = np.load(val_npy)
     lgbm_test = np.load(test_npy)
+    
     os.unlink(val_npy); os.unlink(test_npy)
+    os.unlink(val_npy + ".parquet"); os.unlink(test_npy + ".parquet")
 
     # TCN predictions
     print("Running TCN predictions...")
-    tcn_val  = get_tcn_preds(ckpt, val,  device)
-    tcn_test = get_tcn_preds(ckpt, test, device)
+    tcn_val  = get_tcn_preds(ckpt, val_df,  device)
+    tcn_test = get_tcn_preds(ckpt, test_df, device)
 
     # Meta-learner: Parallel Ridge for each target
     metas = []
-    final_preds_test = np.zeros_like(lgbm_test)
-
+    
     with mlflow.start_run(run_name="hybrid_multi_target_aligned"):
         for i, target in enumerate(TARGETS):
             print(f"Training meta-learner for {target}...")
@@ -117,24 +114,41 @@ def main():
             
             X_val = np.column_stack([lgbm_val[mask_v, i], tcn_val[mask_v, i]])
             X_test = np.column_stack([lgbm_test[mask_t, i], tcn_test[mask_t, i]])
-            y_val = val[target].values[mask_v]
-            y_test = test[target].values[mask_t]
+            y_val = val_df[target].values[mask_v]
+            y_test = test_df[target].values[mask_t]
 
             meta = Ridge(alpha=1.0)
             meta.fit(X_val, y_val)
             metas.append(meta)
             
             p_test = meta.predict(X_test)
-            final_preds_test[mask_t, i] = p_test
-            
             t_mape = mape(y_test, p_test)
             mlflow.log_metric(f"test_mape_{target}", t_mape)
             print(f"  {target:<25} | Test MAPE: {t_mape:.4f}%")
 
-    os.makedirs("models", exist_ok=True)
-    with open("models/meta_learner.pkl", "wb") as f:
+    return metas
+
+
+def main():
+    import torch
+    from models.device import get_device
+
+    device = get_device()
+    print(f"Using device: {device}")
+
+    ckpt_path = os.path.join(ROOT, "models/tcn.pt")
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+
+    val  = pd.read_parquet(os.path.join(ROOT, "data/processed/val.parquet"))
+    test = pd.read_parquet(os.path.join(ROOT, "data/processed/test.parquet"))
+
+    metas = train_meta_learner(val, test, ckpt, device)
+
+    save_path = os.path.join(ROOT, "models/meta_learner.pkl")
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "wb") as f:
         pickle.dump(metas, f)
-    print("Saved → models/meta_learner.pkl")
+    print(f"Saved → {save_path}")
 
 if __name__ == "__main__":
     main()

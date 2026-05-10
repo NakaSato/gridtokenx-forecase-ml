@@ -4,7 +4,7 @@ Aligned to Project Schema.
 """
 import os, sys, json, pickle, subprocess, tempfile
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import numpy as np
 import pandas as pd
@@ -33,7 +33,7 @@ def lgbm_predict_subprocess(parquet_path: str) -> np.ndarray:
     script = f"""
 import os, sys, pickle
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-sys.path.insert(0, {repr(ROOT)})
+sys.path.insert(0, os.path.dirname({repr(ROOT)}))
 import numpy as np, pandas as pd
 from models.lgbm_model import FEATURES
 with open("models/lgbm.pkl","rb") as f: model = pickle.load(f)
@@ -46,7 +46,7 @@ for col in FEATURES:
 np.save({repr(out)}, model.predict(df[FEATURES]))
 """
     r = subprocess.run([sys.executable, "-c", script],
-                       capture_output=True, text=True, cwd=ROOT)
+                       capture_output=True, text=True, cwd=os.path.dirname(ROOT))
     if r.returncode != 0:
         raise RuntimeError(r.stderr)
     preds = np.load(out)

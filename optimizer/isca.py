@@ -10,7 +10,8 @@ import numpy as np
 import yaml
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from optimizer.dispatch import _bsfc, HourlyDispatch
+from domain.dispatch import _bsfc
+from domain.entities import HourlyDispatch
 from typing import List
 
 

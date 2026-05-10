@@ -7,7 +7,8 @@
       "Bash(du *)",
       "Bash(find *)",
       "Bash(colab-cli *)",
-      "Bash(echo *)"
+      "Bash(echo *)",
+      "Bash(uv *)"
     ]
   },
   "$version": 4

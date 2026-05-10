@@ -4,20 +4,8 @@ Given 24h forecast arrays, returns hourly dispatch schedule.
 """
 import numpy as np
 import yaml
-from dataclasses import dataclass, field
 from typing import List
-
-
-@dataclass
-class HourlyDispatch:
-    hour: int
-    load_mw: float
-    circuit_mw: float
-    diesel_mw: float
-    bess_mw: float        # positive = discharge, negative = charge
-    bess_soc: float       # 0–1
-    fuel_kg: float
-    carbon_kg: float
+from domain.entities import HourlyDispatch
 
 
 def _bsfc(load_factor: float, curve: dict) -> float:
@@ -34,7 +22,10 @@ def run_dispatch(
     cfg: dict = None,
 ) -> List[HourlyDispatch]:
     if cfg is None:
-        with open("config.yaml") as f:
+        # Note: In a real clean architecture, cfg should be injected
+        import os
+        ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(ROOT, "config.yaml")) as f:
             cfg = yaml.safe_load(f)
 
     bc = cfg["bess"]
@@ -153,18 +144,3 @@ def schedule_summary(schedule: List[HourlyDispatch]) -> dict:
         "step_plan_units": step_plan,
         "bess_soc_final": schedule[-1].bess_soc,
     }
-
-
-if __name__ == "__main__":
-    import json
-    rng = np.random.default_rng(0)
-    load     = rng.uniform(6, 10, 24)
-    circuit  = np.where(np.isin(np.arange(24), [18,19,20,21]),
-                        rng.uniform(1, 4, 24), rng.uniform(12, 16, 24))
-    sched = run_dispatch(load, circuit)
-    summary = schedule_summary(sched)
-    print(json.dumps(summary, indent=2))
-    for s in sched:
-        print(f"h{s.hour:02d} load={s.load_mw:.2f} circ={s.circuit_mw:.2f} "
-              f"diesel={s.diesel_mw:.2f} bess={s.bess_mw:+.2f} "
-              f"soc={s.bess_soc:.2f} fuel={s.fuel_kg:.2f}kg")

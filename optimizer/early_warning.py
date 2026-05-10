@@ -19,13 +19,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 
-@dataclass
-class Warning:
-    level: str          # "CRITICAL" | "WARNING" | "INFO"
-    hour:  int          # hours from now when event occurs
-    message: str
-    soc_at_event: float
-    hvdc_loading_pct: Optional[float] = None   # pandapower result, None if not run
+from domain.entities import GridWarning as Warning
 
 
 def _run_physics_check(

@@ -10,7 +10,7 @@ Every hour:
 
 Usage:
     # Terminal 1 — start API
-    python -m uvicorn api.serve:app --host 0.0.0.0 --port 8000
+    python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 
     # Terminal 2 — run simulator
     python api/rt_simulator.py [--speed 0]   # 0 = no sleep (fast replay)
@@ -120,7 +120,7 @@ def main():
         print(f"✅ API online — device: {r.json()['device']}")
     except Exception as e:
         print(f"❌ API not reachable at {API}: {e}")
-        print("   Start it with:  python -m uvicorn api.serve:app --port 8000")
+        print("   Start it with:  python -m uvicorn api.main:app --port 8000")
         sys.exit(1)
 
     df = pd.read_parquet(os.path.join(ROOT, "data/processed/test.parquet"))

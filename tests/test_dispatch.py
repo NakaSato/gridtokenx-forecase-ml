@@ -9,7 +9,8 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, ROOT)
 
-from optimizer.dispatch import run_dispatch, schedule_summary, _bsfc, HourlyDispatch
+from domain.dispatch import run_dispatch, schedule_summary, _bsfc
+from domain.entities import HourlyDispatch
 
 
 class TestBSFC:

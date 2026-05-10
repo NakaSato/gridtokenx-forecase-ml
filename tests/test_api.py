@@ -16,7 +16,7 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 stdlib_warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
 from fastapi.testclient import TestClient
-from api.serve import app
+from api.main import app
 
 
 @pytest.fixture(scope="module")
@@ -64,22 +64,20 @@ class TestStreamTelemetryEndpoint:
     """Tests for POST /stream/telemetry."""
 
     def _make_row(self, **overrides):
-        from models.tcn_model import SEQ_FEATURES
-        # Initialize with all required fields
-        row = {f: 0.0 for f in [sf.lower() for sf in SEQ_FEATURES]}
-        
-        # Add some realistic values
-        row.update({
-            "tao_load_mw": 8.5,
-            "tao_load_mw_lag_1h": 8.3,
-            "bess_soc_pct": 65.0,
-            "headroom_mw": 1.5,
-            "t2m_celsius": 32.0,
-            "rh_pct": 75.0,
-            "hour_of_day": 14.0,
-            "is_high_season": 1.0,
-            "is_holiday": 0.0
-        })
+        # We need to match TelemetryRow in domain/entities.py
+        row = {
+            "phangan_load_mw": 18.0, "samui_load_mw": 55.0,
+            "phangan_t2m": 30.0, "samui_t2m": 30.0,
+            "t2m_celsius": 32.0, "rh_pct": 75.0, "ghi_w_m2": 500.0, "wind_ms": 2.0,
+            "headroom_mw": 1.5, "max_capacity_mw": 160.0, "capacity_mw": 14.0,
+            "bess_soc_pct": 65.0, "phangan_soc_pct": 80.0, "samui_soc_pct": 80.0,
+            "tourist_index": 1.0, "hour_of_day": 14.0, "day_of_week": 2.0,
+            "is_holiday": 0.0, "is_songkran": 0.0, "is_high_season": 1.0,
+            "carbon_intensity": 0.5, "market_price": 4.5,
+            "tao_load_mw": 8.5, "tao_load_mw_lag_1h": 8.3,
+            "cable_flow_mw_lag_1h": 12.0, "kmb_flow_mw_lag_1h": 10.0,
+            "kmb_trend": 8.0, "kmb_seasonal": 0.5, "kmb_resid": 0.0
+        }
         row.update(overrides)
         return row
 

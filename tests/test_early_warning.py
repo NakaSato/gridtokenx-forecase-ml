@@ -9,7 +9,8 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, ROOT)
 
-from optimizer.early_warning import check_warnings, format_warnings, Warning
+from optimizer.early_warning import check_warnings, format_warnings
+from domain.entities import GridWarning as Warning
 
 
 class TestCheckWarnings:

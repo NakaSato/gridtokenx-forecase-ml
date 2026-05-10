@@ -15,7 +15,7 @@ import pandas as pd
 import yaml
 
 from optimizer.pea_dispatch_opt import pea_optimize, T, _bsfc_interp
-from optimizer.dispatch import run_dispatch, schedule_summary   # rule-based baseline
+from domain.dispatch import run_dispatch, schedule_summary   # rule-based baseline
 
 
 def load_cfg():

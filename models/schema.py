@@ -18,6 +18,7 @@ SEQ_FEATURES = [
 
     # 2. System state
     "headroom_mw", "max_capacity_mw", "capacity_mw", "tourist_index",
+    "bess_soc_pct", "phangan_soc_pct", "samui_soc_pct",
 
     # 3. Calendar + Market
     "hour_of_day", "day_of_week", "is_holiday", "is_songkran", "is_high_season",
@@ -25,6 +26,7 @@ SEQ_FEATURES = [
 
     # 4. Critical Lags
     "tao_load_mw_lag_1h", "cable_flow_mw_lag_1h", "kmb_flow_mw_lag_1h",
+    "tao_load_mw_lag_24h", "cable_flow_mw_lag_24h", "kmb_flow_mw_lag_24h",
 ]
 
 # Tabular Features for LightGBM
