@@ -37,13 +37,17 @@ def get_forecast(cfg, n_days=7, use_kireip=False):
     else:
         df = pd.read_parquet("data/processed/test.parquet")
         n  = n_days * T
-        load    = df["Island_Load_MW"].values[:n]
-        cap_max = cfg["data"]["circuit_cap_max"]
-        hours   = df.index[:n].hour if hasattr(df.index, "hour") else \
-                  pd.to_datetime(df["Timestamp"].values[:n]).hour
-        circuit = np.where(np.isin(hours, cfg["data"]["bottleneck_hours"]),
-                           cap_max * 0.30, cap_max)
-        print("  [Dataset] Synthetic test.parquet")
+        load    = df["tao_load_mw"].values[:n]
+        circuit = df["capacity_mw"].values[:n] if "capacity_mw" in df.columns else \
+                  np.zeros(n) # Fallback handled below
+        
+        if "capacity_mw" not in df.columns:
+            cap_max = cfg["data"]["circuit_cap_max"]
+            hours   = df.index[:n].hour if hasattr(df.index, "hour") else \
+                      pd.to_datetime(df["Timestamp"].values[:n]).hour
+            circuit = np.where(np.isin(hours, cfg["data"]["bottleneck_hours"]),
+                               cap_max * 0.30, cap_max)
+        print("  [Dataset] Standard test.parquet")
     return load, circuit
 
 

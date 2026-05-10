@@ -64,19 +64,22 @@ class TestStreamTelemetryEndpoint:
     """Tests for POST /stream/telemetry."""
 
     def _make_row(self, **overrides):
-        row = {
-            "island_load_mw": 8.5,
-            "load_lag_1h": 8.3,
-            "load_lag_24h": 7.9,
+        from models.tcn_model import SEQ_FEATURES
+        # Initialize with all required fields
+        row = {f: 0.0 for f in [sf.lower() for sf in SEQ_FEATURES]}
+        
+        # Add some realistic values
+        row.update({
+            "tao_load_mw": 8.5,
+            "tao_load_mw_lag_1h": 8.3,
             "bess_soc_pct": 65.0,
             "headroom_mw": 1.5,
-            "dry_bulb_temp": 32.0,
-            "heat_index": 38.0,
-            "rel_humidity": 75.0,
+            "t2m_celsius": 32.0,
+            "rh_pct": 75.0,
             "hour_of_day": 14.0,
             "is_high_season": 1.0,
-            "is_thai_holiday": 0.0
-        }
+            "is_holiday": 0.0
+        })
         row.update(overrides)
         return row
 
@@ -90,7 +93,7 @@ class TestStreamTelemetryEndpoint:
 
     def test_rejects_missing_fields(self, client):
         """Missing required TelemetryRow field should return 422."""
-        incomplete = {"island_load_mw": 8.5}  # missing other fields
+        incomplete = {"tao_load_mw": 8.5}  # missing other fields
         resp = client.post("/stream/telemetry", json={"row": incomplete})
         assert resp.status_code == 422
 
@@ -192,27 +195,19 @@ class TestForecastEndpoint:
 
     def test_rejects_wrong_history_length(self, client):
         """History must have exactly window_size rows."""
-        row = {
-            "island_load_mw": 8.0, "load_lag_1h": 7.8, "load_lag_24h": 7.5,
-            "bess_soc_pct": 65.0, "dry_bulb_temp": 30.0, "heat_index": 35.0,
-            "rel_humidity": 70.0, "hour_of_day": 12.0, "is_high_season": 1.0,
-        }
+        row = TestStreamTelemetryEndpoint()._make_row()
         resp = client.post("/forecast", json={
             "history": [row] * 10,  # too few — need 48
             "circuit_forecast": [14.0] * 24,
-            "lgbm_features": {"Dry_Bulb_Temp": 30},
+            "lgbm_features": {"t2m_celsius": 30},
         })
         assert resp.status_code == 422
 
     def test_rejects_missing_circuit_forecast(self, client):
-        row = {
-            "island_load_mw": 8.0, "load_lag_1h": 7.8, "load_lag_24h": 7.5,
-            "bess_soc_pct": 65.0, "dry_bulb_temp": 30.0, "heat_index": 35.0,
-            "rel_humidity": 70.0, "hour_of_day": 12.0, "is_high_season": 1.0,
-        }
+        row = TestStreamTelemetryEndpoint()._make_row()
         resp = client.post("/forecast", json={
             "history": [row] * 48,
-            "lgbm_features": {"Dry_Bulb_Temp": 30},
+            "lgbm_features": {"t2m_celsius": 30},
         })
         assert resp.status_code == 422
 

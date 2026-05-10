@@ -1,6 +1,6 @@
 """
 Multi-Target Temporal Convolutional Network for sequential forecasting.
-Targets: Samui Load, Phangan Load, Tao Load, KMB Capacity.
+Targets: tao_load_mw, cable_flow_mw, kmb_flow_mw.
 """
 import os
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -21,19 +21,27 @@ from models.mlflow_utils import setup_mlflow
 setup_mlflow()
 mlflow.set_experiment("GridTokenX_TCN")
 
+# ── Feature Set (Aligned with Project Schema) ─────────────────────────────────
+
 SEQ_FEATURES = [
-    "Island_Load_MW", "Phangan_Load_MW", "Samui_Load_MW", "Samui_Circuit_MW",
-    "Island_Load_MW_Lag_1h", "Phangan_Load_MW_Lag_1h", "Samui_Load_MW_Lag_1h", "Samui_Circuit_MW_Lag_1h",
-    "KMB_Trend", "KMB_Seasonal", "KMB_Resid",
-    "BESS_SoC_Pct", "Headroom_MW",
-    "Dry_Bulb_Temp", "Heat_Index", "Rel_Humidity",
-    "Hour_of_Day", "Is_High_Season", "Is_Thai_Holiday",
+    # 1. Per-location load + weather (8)
+    "phangan_load_mw", "samui_load_mw", "phangan_t2m", "samui_t2m", 
+    "t2m_celsius", "rh_pct", "ghi_w_m2", "wind_ms",
+    
+    # 2. System state (7)
+    "headroom_mw", "max_capacity_mw", "capacity_mw", 
+    "bess_soc_pct", "phangan_soc_pct", "samui_soc_pct", "tourist_index",
+    
+    # 3. Calendar (5) + Market (2)
+    "hour_of_day", "day_of_week", "is_holiday", "is_songkran", "is_high_season",
+    "carbon_intensity", "market_price",
+    
+    # 4. Critical Lags
+    "tao_load_mw_lag_1h", "cable_flow_mw_lag_1h", "kmb_flow_mw_lag_1h",
+    "kmb_trend", "kmb_seasonal", "kmb_resid"
 ]
 
-TARGETS = ["Samui_Load_MW", "Phangan_Load_MW", "Island_Load_MW", "Samui_Circuit_MW"]
-
-def mape(y_true, y_pred):
-    return np.mean(np.abs((y_true - y_pred) / (y_true + 1e-8))) * 100
+TARGETS = ["tao_load_mw", "cable_flow_mw", "kmb_flow_mw"]
 
 # ── Model ────────────────────────────────────────────────────────────────────
 
@@ -58,15 +66,16 @@ class TCNBlock(nn.Module):
             nn.ReLU(),
         )
         self.downsample = nn.Conv1d(in_ch, out_ch, 1) if in_ch != out_ch else None
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         out = self.net(x)
         res = self.downsample(x) if self.downsample else x
-        return torch.relu(out + res)
+        return self.dropout(torch.relu(out + res))
 
 
 class TCN(nn.Module):
-    def __init__(self, in_features, filters, kernel_size, n_layers, horizon, n_targets=4, dropout=0.2):
+    def __init__(self, in_features, filters, kernel_size, n_layers, horizon, n_targets=3, dropout=0.2):
         super().__init__()
         layers = []
         for i in range(n_layers):
@@ -87,6 +96,9 @@ class TCN(nn.Module):
 
 class WindowDataset(Dataset):
     def __init__(self, df, window, horizon):
+        # Fill missing features with 0.0
+        for col in SEQ_FEATURES:
+            if col not in df.columns: df[col] = 0.0
         vals = df[SEQ_FEATURES].values.astype(np.float32)
         tgt  = df[TARGETS].values.astype(np.float32)
         self.X, self.y = [], []
@@ -119,25 +131,20 @@ def main():
 
     device = get_device()
     print(f"Using device: {device}")
-    dropout = tc.get("dropout", 0.2)
     model = TCN(len(SEQ_FEATURES), tc["filters"], tc["kernel_size"],
-                tc["layers"], horizon, n_targets=len(TARGETS), dropout=dropout).to(device)
+                tc["layers"], horizon, n_targets=len(TARGETS), dropout=tc.get("dropout", 0.2)).to(device)
     
     opt   = torch.optim.Adam(model.parameters(), lr=tc["learning_rate"])
     loss_fn = nn.MSELoss()
 
     best_val, best_state = float("inf"), None
-    with mlflow.start_run(run_name="tcn_multi_target"):
+    with mlflow.start_run(run_name="tcn_multi_target_aligned"):
         mlflow.log_params({
             "targets": TARGETS,
-            "filters": tc["filters"],
-            "kernel_size": tc["kernel_size"],
-            "layers": tc["layers"],
-            "learning_rate": tc["learning_rate"],
-            "epochs": tc["epochs"],
-            "batch_size": tc["batch_size"],
             "window_size": window,
             "forecast_horizon": horizon,
+            "filters": tc["filters"],
+            "layers": tc["layers"],
         })
 
         for epoch in range(1, tc["epochs"] + 1):
@@ -173,8 +180,7 @@ def main():
                 "config": tc,
                 "in_features": len(SEQ_FEATURES),
                 "n_targets": len(TARGETS),
-                "targets": TARGETS,
-                "dropout": dropout}, "models/tcn.pt")
+                "targets": TARGETS}, "models/tcn.pt")
     print("Saved → models/tcn.pt")
 
 if __name__ == "__main__":

@@ -175,8 +175,8 @@ const MeterDetails = () => {
                 </div>
                 <h2 className="text-2xl font-black text-white mb-2 uppercase">Meter Not Found</h2>
                 <p className="text-slate-400 mb-6">{error || `Could not find data for ${meterId}`}</p>
-                <Link href="/map" className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors">
-                    Return to Map
+                <Link href="/dashboard" className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors">
+                    Return to Dashboard
                 </Link>
             </div>
         );
@@ -205,7 +205,7 @@ const MeterDetails = () => {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div className="space-y-2">
                         <div className="flex items-center gap-3">
-                            <Link href="/map" className="p-2 hover:bg-white/5 rounded-xl transition-colors text-slate-400 hover:text-white">
+                            <Link href="/dashboard" className="p-2 hover:bg-white/5 rounded-xl transition-colors text-slate-400 hover:text-white">
                                 <ChevronLeft className="w-6 h-6" />
                             </Link>
                             <h1 className="text-4xl font-black tracking-tighter text-white uppercase">{metadata.location_name}</h1>

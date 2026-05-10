@@ -75,19 +75,20 @@ except Exception as e:
 
 # LightGBM is run via subprocess on macOS to avoid OpenMP conflicts with Torch
 LGBM_FEATURES = [
-    "Dry_Bulb_Temp", "Rel_Humidity", "Solar_Irradiance", "Heat_Index",
-    "Temp_Roll_Mean_3h", "Temp_Roll_Mean_6h",
-    "Humid_Roll_Mean_3h", "Humid_Roll_Mean_6h", "Temp_Gradient",
-    "Carbon_Intensity", "Market_Price",
-    "Tourist_Index", "Is_High_Season",
-    "Hour_of_Day", "Day_of_Week",
-    "Is_Thai_Holiday", "Is_Songkran",
-    "Load_Lag_1h", "Load_Lag_24h", "Load_Lag_168h",
-    "Load_Roll_Mean_3h", "Load_Roll_Std_3h",
-    "Load_Roll_Mean_6h", "Load_Roll_Std_6h",
-    "Max_Capacity_MW", "Headroom_MW",
-    "Phangan_Load_Lag_1h", "Phangan_Load_Roll_Mean_3h", "Phangan_Load_Roll_Mean_6h",
-    "Samui_Load_Lag_1h", "Samui_Load_Roll_Mean_3h", "Samui_Load_Roll_Mean_6h",
+    "t2m_celsius", "rh_pct", "ghi_w_m2", "heat_index",
+    "tao_load_roll_mean_3h", "tao_load_roll_mean_6h",
+    "tao_load_roll_std_3h", "tao_load_roll_std_6h", "temp_gradient",
+    "carbon_intensity", "market_price",
+    "tourist_index", "is_high_season",
+    "hour_of_day", "day_of_week",
+    "is_holiday", "is_songkran",
+    "tao_load_mw_lag_1h", "tao_load_mw_lag_24h",
+    "cable_flow_mw_lag_1h", "cable_flow_mw_lag_24h",
+    "kmb_flow_mw_lag_1h", "kmb_flow_mw_lag_24h",
+    "kmb_trend", "kmb_seasonal", "kmb_resid",
+    "capacity_mw", "headroom_mw", "max_capacity_mw",
+    "phangan_load_mw", "samui_load_mw", "phangan_t2m", "samui_t2m",
+    "phangan_soc_pct", "samui_soc_pct"
 ]
 
 # SEQ_FEATURES maps to TelemetryRow field names (snake_case)
@@ -97,17 +98,42 @@ _SEQ_FIELD = [f.lower() for f in SEQ_FEATURES]
 
 class TelemetryRow(BaseModel):
     """One hour of real-time telemetry — matches SEQ_FEATURES exactly."""
-    island_load_mw:  float
-    load_lag_1h:     float
-    load_lag_24h:    float
-    bess_soc_pct:    float
-    headroom_mw:     float
-    dry_bulb_temp:   float
-    heat_index:      float
-    rel_humidity:    float
-    hour_of_day:     float
-    is_high_season:  float
-    is_thai_holiday: float
+    # 1. Per-location load + weather
+    phangan_load_mw:  float
+    samui_load_mw:    float
+    phangan_t2m:      float
+    samui_t2m:        float
+    t2m_celsius:      float
+    rh_pct:           float
+    ghi_w_m2:         float
+    wind_ms:          float
+    
+    # 2. System state
+    headroom_mw:      float
+    max_capacity_mw:  float
+    capacity_mw:      float
+    bess_soc_pct:     float
+    phangan_soc_pct:  float
+    samui_soc_pct:    float
+    tourist_index:    float
+    
+    # 3. Calendar + Market
+    hour_of_day:      float
+    day_of_week:      float
+    is_holiday:       float
+    is_songkran:      float
+    is_high_season:   float
+    carbon_intensity: float
+    market_price:     float
+    
+    # 4. Critical Lags
+    tao_load_mw:      float
+    tao_load_mw_lag_1h: float
+    cable_flow_mw_lag_1h: float
+    kmb_flow_mw_lag_1h: float
+    kmb_trend:        float
+    kmb_seasonal:     float
+    kmb_resid:        float
 
 
 class TelemetryStreamRequest(BaseModel):
@@ -204,7 +230,7 @@ class StreamingEngine:
                     self.buffer.append(row_obj)
                     # Sync grid state with last known headroom/load
                     # (Note: real state reconstruction would need more history, but this syncs current)
-                    self.grid.update(row_obj.island_load_mw, self.cfg["data"]["circuit_cap_max"] - row_obj.headroom_mw)
+                    self.grid.update(row_obj.tao_load_mw, self.cfg["data"]["circuit_cap_max"] - row_obj.headroom_mw)
 
             metrics = conn.execute("SELECT actual, forecast FROM metrics ORDER BY id ASC").fetchall()
             for a, f in metrics:
@@ -217,8 +243,8 @@ class StreamingEngine:
         
         # Update physical grid simulation state
         # If circuit_cap_mw not provided, estimate from headroom: Cap = Headroom + Load
-        cap = circuit_cap_mw if circuit_cap_mw is not None else (row.headroom_mw + row.island_load_mw)
-        self.grid.update(row.island_load_mw, cap)
+        cap = circuit_cap_mw if circuit_cap_mw is not None else (row.headroom_mw + row.tao_load_mw)
+        self.grid.update(row.tao_load_mw, cap)
 
         with sqlite3.connect(self.db_path) as conn:
             vals = [getattr(row, f) for f in _SEQ_FIELD]
@@ -273,7 +299,7 @@ STREAM = StreamingEngine(tc["window_size"], DB_PATH, CFG)
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 @mlflow.trace(span_type="FUNC", name="lgbm_predict")
-def _lgbm_predict(features: dict) -> float:
+def _lgbm_predict(features: dict) -> List[float]:
     """Run LightGBM prediction in a clean subprocess to avoid macOS OpenMP conflicts."""
     script = f"""
 import pickle, os, sys, json
@@ -281,14 +307,14 @@ import numpy as np
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 ROOT = {repr(ROOT)}
 sys.path.insert(0, ROOT)
-from models.lgbm_model import FEATURES
 with open(os.path.join(ROOT, "models/lgbm.pkl"), "rb") as f:
     model = pickle.load(f)
 features = json.loads({repr(json.dumps(features))})
+from models.lgbm_model import FEATURES
 X_row = [features.get(c, 0.0) for c in FEATURES]
 X = np.array([X_row])
-pred = float(model.predict(X)[0])
-print(pred)
+preds = model.predict(X)[0].tolist()
+print(json.dumps(preds))
 """
     try:
         result = subprocess.run(
@@ -297,30 +323,34 @@ print(pred)
         )
         if result.returncode != 0:
             print(f"⚠️  LGBM subprocess error: {result.stderr}")
-            return 0.0
-        return float(result.stdout.strip())
+            return [0.0, 0.0, 0.0]
+        return json.loads(result.stdout.strip())
     except Exception as e:
         print(f"⚠️  LGBM prediction failed: {e}")
-        return 0.0
+        return [0.0, 0.0, 0.0]
 
 
 @mlflow.trace(span_type="FUNC", name="tcn_predict")
 def _tcn_predict(history) -> np.ndarray:
-    if not _NET: return np.zeros(tc["forecast_horizon"])
+    if not _NET: return np.zeros((tc["forecast_horizon"], 3))
     arr = np.array([[getattr(r, f) for f in _SEQ_FIELD] for r in history], dtype=np.float32)
     x = torch.tensor(arr).unsqueeze(0).to(DEVICE)
     with torch.no_grad():
-        return _NET(x).cpu().numpy()[0]
+        return _NET(x).cpu().numpy()[0] # (horizon, 3)
 
 
 @mlflow.trace(span_type="FUNC", name="hybrid_forecast")
 def _hybrid_forecast(history, lgbm_features: dict) -> List[float]:
-    if not META: return [0.0] * tc["forecast_horizon"]
+    if not META or not isinstance(META, list): 
+        return [0.0] * tc["forecast_horizon"]
+    
     horizon = tc["forecast_horizon"]
-    lgbm_pred = _lgbm_predict(lgbm_features)
+    lgbm_preds = _lgbm_predict(lgbm_features)
     tcn_preds = _tcn_predict(history)
-    X_meta = np.column_stack([np.full(horizon, lgbm_pred), tcn_preds])
-    return META.predict(X_meta).tolist()
+    
+    # Target 0: tao_load_mw
+    X_meta = np.column_stack([np.full(horizon, lgbm_preds[0]), tcn_preds[:, 0]])
+    return META[0].predict(X_meta).tolist()
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -377,7 +407,7 @@ def stream_telemetry(req: TelemetryStreamRequest):
             cluster_dispatch = get_cluster_dispatch(
                 samui_load=req.samui_load_mw,
                 phangan_load=req.phangan_load_mw,
-                tao_load=req.row.island_load_mw
+                tao_load=req.row.tao_load_mw
             )
         except Exception as e:
             print(f"⚠️  Cluster ADMM failed: {e}")

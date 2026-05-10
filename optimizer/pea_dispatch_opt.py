@@ -1,391 +1,225 @@
 """
-PEA Dispatch Optimization Model — Mixed-Integer Linear Program (MILP)
+GridTokenX Coordinated Cluster MILP Dispatch
+==============================================
+Optimizes a 3-island radial-serial chain: Khanom -> Samui -> Phangan -> Tao.
+Aligned to Project Schema and time-varying cable capacities.
 
-Physical model for Ko Tao islanded microgrid:
-  - Circuit import from mainland (given, not controllable)
-  - Diesel generator (dispatchable, binary on/off)
-  - BESS (charge/discharge, SoC-bounded)
-  - Curtailment slack: surplus that cannot be stored is spilled (free disposal)
-  - Load-shedding slack: penalised heavily (should be zero in normal operation)
-
-Decision variables (per hour h = 0..23):
-  u[h]      ∈ {0,1}   diesel on/off
-  p_d[h]    ≥ 0       diesel output MW
-  p_bp[h]   ≥ 0       BESS discharge MW  (positive)
-  p_bn[h]   ≥ 0       BESS charge MW     (positive magnitude, actual = −p_bn)
-  s[h]      ≥ 0       SoC MWh
-  spill[h]  ≥ 0       curtailed surplus MW
-  shed[h]   ≥ 0       load-shedding MW (heavily penalised)
-
-Power balance (equality):
-  circuit[h] + p_d[h] + p_bp[h] − p_bn[h] − spill[h] − shed[h] = load[h]
-
-SoC dynamics:
-  s[h] = s[h-1] − p_bp[h] + p_bn[h]   (lossless, η absorbed into bounds)
-
-Objective — minimise total operating cost:
-  min  Σ_h [ fuel_cost(p_d[h]) + carbon_cost(p_d[h])
-             + deg_per_mwh · p_bp[h]
-             + spill_penalty · spill[h]
-             + shed_penalty  · shed[h] ]
-
-PEA constraints:
-  C1  Power balance
-  C2  Diesel bounds:   P_min·u[h] ≤ p_d[h] ≤ P_rated·u[h]
-  C3  BESS discharge:  p_bp[h] ≤ P_bess_max
-  C4  BESS charge:     p_bn[h] ≤ P_bess_max
-  C5  SoC dynamics
-  C6  SoC bounds:      SoC_min ≤ s[h] ≤ SoC_max
-  C7  Diesel ramp:     |p_d[h] − p_d[h-1]| ≤ Ramp_MW
-  C8  Min-up time      (linearised)
-  C9  Min-down time    (linearised)
-  C10 Daily cycle cap: Σ p_bp[h] ≤ 0.5·usable_cap
-
-Solver: scipy.optimize.milp  (HiGHS backend, no extra install)
+Topology & Constraints:
+  1. Mainland (Khanom) -> Samui: P_main <= kmb_flow_mw (predicted headroom/limit).
+  2. Samui -> Phangan: P_SP <= cable_flow_mw (predicted limit).
+  3. Phangan -> Tao: P_PT <= capacity_mw (predicted thermal limit).
+  4. Ko Tao: 10 MW Diesel Plant (tao_load_mw).
+  5. Ko Phangan: 15 MW Mobile Generators (phangan_load_mw).
+  6. Ko Samui: 25 MW Mobile Generators + 50 MWh BESS (samui_load_mw).
 """
 from __future__ import annotations
 import numpy as np
 import yaml
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict
 from scipy.optimize import milp, LinearConstraint, Bounds
 from scipy.sparse import csc_matrix
 
-from optimizer.isca import isca_optimize
-
 # ── Constants ────────────────────────────────────────────────────────────────
-SPILL_PENALTY  = 0.001  # THB/MWh curtailment (near-zero, free disposal)
-SHED_PENALTY   = 1e6    # THB/MWh load-shedding (very high)
-
+SPILL_PENALTY = 0.001
+SHED_PENALTY  = 1e6
 
 @dataclass
-class HourResult:
+class ClusterStepResult:
     hour: int
-    load_mw: float
-    circuit_mw: float
-    diesel_mw: float
-    diesel_on: int
-    bess_mw: float       # net: + discharge / − charge
-    soc_mwh: float
-    spill_mw: float
-    shed_mw: float
+    tao_load: float
+    pha_load: float
+    sam_load: float
+    tao_gen: float
+    pha_gen: float
+    sam_gen: float
+    bess_mw: float
+    bess_soc: float
+    flow_main: float
+    flow_sp: float
+    flow_pt: float
+    shed_total: float
     fuel_kg: float
     carbon_kg: float
     cost_thb: float
-
 
 def _bsfc_interp(load_factor: float, curve: dict) -> float:
     keys = sorted(curve.keys())
     vals = [curve[k] for k in keys]
     return float(np.interp(max(load_factor, 0.0), keys, vals))
 
-
 def _fit_linear_fuel(rated: float, curve: dict) -> tuple[float, float]:
-    """
-    Fit a linear fuel model: Fuel(p) = F_fixed * u + F_slope * p
-    Using 25% and 75% load factor points as representative for the operational range.
-    Units: kg/h
-    """
     lf1, lf2 = 0.25, 0.75
     p1, p2 = lf1 * rated, lf2 * rated
-    f1 = _bsfc_interp(lf1, curve) * p1   # g/kWh * MW = kg/h
+    f1 = _bsfc_interp(lf1, curve) * p1
     f2 = _bsfc_interp(lf2, curve) * p2
-    
     slope = (f2 - f1) / (p2 - p1)
     intercept = f2 - slope * p2
     return max(0.0, intercept), slope
 
-
-def _fuel_cost(p_d: float, rated: float, curve: dict,
-               d_price: float, c_price: float) -> tuple[float, float, float]:
-    """Return (fuel_kg, co2_kg, cost_thb)."""
-    if p_d <= 0.001:
-        return 0.0, 0.0, 0.0
-    lf      = p_d / rated
-    sfc     = _bsfc_interp(lf, curve)
-    fuel_kg = sfc * p_d                 # g/kWh * MW = kg/h
-    co2_kg  = fuel_kg * 2.68
-    cost    = fuel_kg * (d_price + 2.68 * c_price)
+def _fuel_cost(p_d: float, rated: float, curve: dict, d_price: float, c_price: float):
+    if p_d <= 0.001: return 0.0, 0.0, 0.0
+    lf = p_d / rated
+    sfc = _bsfc_interp(lf, curve)
+    fuel_kg = sfc * p_d
+    co2_kg = fuel_kg * 2.68
+    cost = fuel_kg * (d_price + 2.68 * c_price)
     return fuel_kg, co2_kg, cost
 
-
-def _build_milp(load: np.ndarray, circuit: np.ndarray,
-                initial_soc_mwh: float, cfg: dict):
-    """
-    Variable layout (n = 7*T):
-      [0:T]    u[h]      binary  diesel on/off
-      [T:2T]   p_d[h]    cont    diesel MW ≥ 0
-      [2T:3T]  p_bp[h]   cont    BESS discharge MW ≥ 0
-      [3T:4T]  p_bn[h]   cont    BESS charge MW ≥ 0  (magnitude)
-      [4T:5T]  s[h]      cont    SoC MWh
-      [5T:6T]  spill[h]  cont    curtailment MW ≥ 0
-      [6T:7T]  shed[h]   cont    load-shed MW ≥ 0
-    """
-    bc  = cfg["bess"]
-    dc  = cfg["diesel"]
-    oc  = cfg["optimizer"]
+def _build_cluster_milp(
+    loads: Dict[str, np.ndarray], 
+    caps: Dict[str, np.ndarray],
+    initial_soc_mwh: float, 
+    cfg: dict
+):
+    T = len(loads["tao"])
+    n = 14 * T
+    
+    bc = cfg["bess"]
+    dc = cfg["diesel"]
+    oc = cfg["optimizer"]
+    cl = cfg["cluster"]["assets"]
     freq = cfg["data"].get("frequency", "h")
     sph = 4 if freq == "15min" else 1
-    T = len(load) # Horizon steps (e.g. 96)
+    dt = 1.0 / sph
 
-    cap         = bc["capacity_mwh"]
-    soc_min_mwh = bc["soc_min"] * cap
-    soc_max_mwh = bc["soc_max"] * cap
-    rated       = dc["rated_mw"]
-    d_price     = oc["diesel_price_per_kg"]
-    c_price     = oc["carbon_price_per_kg"]
-    deg_cost    = oc["bess_degradation_cost_per_cycle"]
-    bess_max    = bc["charge_rate_mw"]
-    curve       = {float(k): v for k, v in dc["bsfc_curve"].items()}
+    tao_rated = cl["ko_tao"]["diesel_mw"]
+    pha_rated = cl["ko_phangan"]["diesel_mw"]
+    sam_rated = cl["ko_samui"]["diesel_mw"]
+    bess_cap  = bc["capacity_mwh"]
+    bess_max  = bc["charge_rate_mw"]
     
-    # Operational constraints from config
-    p_min       = dc.get("min_load_mw", 2.0)
-    ramp_limit  = dc.get("ramp_rate_mw_per_h", 3.0)
-    min_up      = dc.get("min_up_time_h", 2)
-    min_dn      = dc.get("min_down_time_h", 2)
-
-    n = 7 * T
-
-    # ── Objective ────────────────────────────────────────────────────────────
-    # Use fixed + slope model for better MILP performance
-    f_fixed, f_slope = _fit_linear_fuel(rated, curve)
+    curve = {float(k): v for k, v in dc["bsfc_curve"].items()}
+    f_fix, f_slope = _fit_linear_fuel(tao_rated, curve)
+    cost_per_kg = oc["diesel_price_per_kg"] + 2.68 * oc["carbon_price_per_kg"]
     
-    # Total cost per kg: fuel_price + carbon_factor * carbon_price
-    cost_per_kg = d_price + 2.68 * c_price
-    
-    c_u      = (f_fixed * cost_per_kg) / sph
-    c_p      = (f_slope * cost_per_kg) / sph
-    
-    # Handle zero BESS capacity
-    depth       = bc["soc_max"] - bc["soc_min"]
-    deg_per_mwh = deg_cost / (cap * depth) if cap > 0.01 else 1000.0
-
     c_obj = np.zeros(n)
-    c_obj[:T]      = c_u            # fixed cost when ON
-    c_obj[T:2*T]   = c_p            # incremental power cost
-    c_obj[2*T:3*T] = deg_per_mwh / sph  # BESS discharge degradation (per step)
-    c_obj[5*T:6*T] = SPILL_PENALTY / sph # curtailment
-    c_obj[6*T:7*T] = SHED_PENALTY / sph  # load-shedding
+    # Fuel costs (Tao, Phangan, Samui)
+    c_obj[0:T]      = (f_fix * cost_per_kg) * dt
+    c_obj[T:2*T]    = (f_slope * cost_per_kg) * dt
+    c_obj[2*T:3*T]  = (f_fix * cost_per_kg * 1.1) * dt # Slight premium for mobile gens
+    c_obj[3*T:4*T]  = (f_slope * cost_per_kg * 1.1) * dt
+    c_obj[4*T:5*T]  = (f_fix * cost_per_kg * 1.2) * dt
+    c_obj[5*T:6*T]  = (f_slope * cost_per_kg * 1.2) * dt
+    
+    depth = bc["soc_max"] - bc["soc_min"]
+    deg_per_mwh = oc["bess_degradation_cost_per_cycle"] / (bess_cap * depth + 1e-6)
+    c_obj[6*T:7*T] = deg_per_mwh * dt # Charge
+    c_obj[7*T:8*T] = deg_per_mwh * dt # Discharge
+    
+    c_obj[12*T:13*T] = SHED_PENALTY * dt
+    c_obj[13*T:14*T] = SPILL_PENALTY * dt
 
-    # ── Integrality ──────────────────────────────────────────────────────────
     integrality = np.zeros(n)
-    integrality[:T] = 1  # u[h] binary
+    integrality[0:T] = 1; integrality[2*T:3*T] = 1; integrality[4*T:5*T] = 1
 
-    # ── Variable bounds ──────────────────────────────────────────────────────
-    lb = np.zeros(n)
-    ub = np.zeros(n)
+    lb, ub = np.zeros(n), np.full(n, np.inf)
+    ub[0:T] = 1; ub[T:2*T] = tao_rated
+    ub[2*T:3*T] = 1; ub[3*T:4*T] = pha_rated
+    ub[4*T:5*T] = 1; ub[5*T:6*T] = sam_rated
+    ub[6*T:7*T] = bess_max; ub[7*T:8*T] = bess_max
+    lb[8*T:9*T] = bc["soc_min"] * bess_cap; ub[8*T:9*T] = bc["soc_max"] * bess_cap
+    
+    # ── Inter-island Flow Limits (Time-varying) ──
+    ub[9*T:10*T] = caps["kmb"]      # P_main
+    ub[10*T:11*T] = caps["cable"]   # P_SP
+    ub[11*T:12*T] = caps["capacity"] # P_PT
+    
+    bounds = Bounds(lb, ub)
 
-    ub[:T]       = 1                          # u binary
-    ub[T:2*T]    = rated                      # diesel MW
-    ub[2*T:3*T]  = bess_max                   # BESS discharge
-    ub[3*T:4*T]  = bess_max                   # BESS charge
-    lb[4*T:5*T]  = soc_min_mwh
-    ub[4*T:5*T]  = soc_max_mwh
-    ub[5*T:6*T]  = float(max(circuit)) + rated + bess_max  # spill
-    ub[6*T:7*T]  = float(max(load))                        # shed
-
-    bounds = Bounds(lb=lb, ub=ub)
-
-    # ── Constraints ──────────────────────────────────────────────────────────
     A_rows, lo_vals, hi_vals = [], [], []
-
     def add(row_dict: dict, lo: float, hi: float):
         r = np.zeros(n)
-        for idx, val in row_dict.items():
-            r[idx] += val
-        A_rows.append(r)
-        lo_vals.append(lo)
-        hi_vals.append(hi)
-
-    dt = 1.0 / sph  # time delta (0.25h for 15-min)
+        for idx, val in row_dict.items(): r[idx] += val
+        A_rows.append(r); lo_vals.append(lo); hi_vals.append(hi)
 
     for h in range(T):
-        u     = h
-        pd    = T + h
-        pbp   = 2*T + h   # discharge
-        pbn   = 3*T + h   # charge (magnitude)
-        s     = 4*T + h
-        spill = 5*T + h
-        shed  = 6*T + h
+        ut, pt = h, T + h
+        up, pp = 2*T + h, 3*T + h
+        us, ps = 4*T + h, 5*T + h
+        pbp, pbn, s = 6*T + h, 7*T + h, 8*T + h
+        P_main, P_SP, P_PT = 9*T + h, 10*T + h, 11*T + h
+        shed, spill = 12*T + h, 13*T + h
 
-        # C1: power balance
-        # circuit[h] + p_d + p_bp - p_bn - spill + shed = load[h]
-        rhs = load[h] - circuit[h]
-        add({pd: 1, pbp: 1, pbn: -1, spill: -1, shed: 1}, rhs, rhs)
+        # Balance Equations
+        add({P_PT: 1, pt: 1, shed: 1, spill: -1}, loads["tao"][h], loads["tao"][h])
+        add({P_SP: 1, P_PT: -1, pp: 1}, loads["pha"][h], loads["pha"][h])
+        add({P_main: 1, P_SP: -1, ps: 1, pbp: 1, pbn: -1}, loads["sam"][h], loads["sam"][h])
 
-        # C2: diesel bounds  P_min*u ≤ p_d ≤ P_rated*u
-        add({pd: 1, u: -rated},         -np.inf, 0)   # p_d ≤ rated*u
-        add({pd: 1, u: -p_min},          0, np.inf)   # p_d ≥ P_min*u
+        # Commitment/Capacity Constraints
+        p_min = dc.get("min_load_mw", 2.0)
+        add({pt: 1, ut: -tao_rated}, -np.inf, 0); add({pt: 1, ut: -p_min}, 0, np.inf)
+        add({pp: 1, up: -pha_rated}, -np.inf, 0); add({pp: 1, up: -p_min}, 0, np.inf)
+        add({ps: 1, us: -sam_rated}, -np.inf, 0); add({ps: 1, us: -p_min}, 0, np.inf)
 
-        # C5: SoC dynamics  s[h] = s[h-1] - dt*p_bp[h] + dt*p_bn[h]
+        # BESS SoC Dynamics
         if h == 0:
-            # s[0] = s_init - dt*p_bp[0] + dt*p_bn[0]
             add({s: 1, pbp: dt, pbn: -dt}, initial_soc_mwh, initial_soc_mwh)
         else:
-            s_prev = 4*T + (h - 1)
-            # s[h] - s[h-1] + dt*p_bp[h] - dt*p_bn[h] = 0
-            add({s: 1, s_prev: -1, pbp: dt, pbn: -dt}, 0, 0)
-
-        # C7: diesel ramp
-        if h > 0:
-            pd_prev = T + (h - 1)
-            add({pd: 1, pd_prev: -1}, -ramp_limit * dt, ramp_limit * dt)
-
-    # C8/C9: min-up / min-down time
-    min_up_steps = int(min_up * sph)
-    min_dn_steps = int(min_dn * sph)
-    for h in range(1, T):
-        u_h   = h
-        u_hm1 = h - 1
-        for k in range(1, min(min_up_steps, T - h)):
-            add({u_h: 1, u_hm1: -1, h + k: -1}, -np.inf, 0)
-        for k in range(1, min(min_dn_steps, T - h)):
-            add({u_hm1: 1, u_h: -1, h + k: 1}, -np.inf, 1)
-
-    # C10: daily BESS cycle cap (Relaxed for emergencies)
-    daily_limit = 2.0 * (bc["soc_max"] - bc["soc_min"]) * cap
-    row = np.zeros(n)
-    row[2*T:3*T] = dt   # sum of (p_bp * dt)
-    A_rows.append(row); lo_vals.append(-np.inf); hi_vals.append(daily_limit)
+            add({s: 1, (8*T + h - 1): -1, pbp: dt, pbn: -dt}, 0, 0)
 
     A = csc_matrix(np.array(A_rows))
     constraints = LinearConstraint(A, lo_vals, hi_vals)
-
-    meta = dict(rated=rated, curve=curve, d_price=d_price,
-                c_price=c_price, cap=cap, sph=sph)
-    return c_obj, integrality, bounds, constraints, meta
-
-
-def pea_optimize(
-    load: np.ndarray,
-    circuit: np.ndarray,
-    initial_soc: float = 0.65,
-    cfg: dict | None = None,
-) -> dict:
-    """
-    Run PEA MILP dispatch optimisation for the given horizon.
-    """
-    if cfg is None:
-        with open("config.yaml") as f:
-            cfg = yaml.safe_load(f)
-
-    cap             = cfg["bess"]["capacity_mwh"]
-    initial_soc_mwh = initial_soc * cap
-    T = len(load)
-
-    c_obj, integrality, bounds, constraints, meta = _build_milp(
-        load, circuit, initial_soc_mwh, cfg
-    )
-
-    result = milp(
-        c_obj,
-        constraints=constraints,
-        integrality=integrality,
-        bounds=bounds,
-        options={"disp": False, "time_limit": 30.0},
-    )
-
-    if result.status not in (0, 1):
-        print(f"   [MILP] Solver infeasible or timeout ({result.message}). Falling back to ISCA...")
-        
-        # Lower ISCA iterations for speed during fallback
-        original_iter = cfg["optimizer"]["isca"]["max_iter"]
-        cfg["optimizer"]["isca"]["max_iter"] = 100
-        
-        try:
-            isca_res = isca_optimize(load, circuit, initial_soc, cfg)
-        finally:
-            cfg["optimizer"]["isca"]["max_iter"] = original_iter
-
-        mapped_schedule = []
-        total_shed = 0.0
-        for s in isca_res["schedule"]:
-            # Compute shed (if supplied < load)
-            supplied = s.circuit_mw + s.diesel_mw + s.bess_mw
-            shed = max(0.0, s.load_mw - supplied)
-            total_shed += shed
-            
-            # Reconstruct cost (roughly)
-            cost_per_kg = meta["d_price"] + 2.68 * meta["c_price"]
-            cost_thb = s.fuel_kg * cost_per_kg
-            
-            mapped_schedule.append(HourResult(
-                hour=s.hour,
-                load_mw=s.load_mw,
-                circuit_mw=s.circuit_mw,
-                diesel_mw=s.diesel_mw,
-                diesel_on=1 if s.diesel_mw > 0 else 0,
-                bess_mw=s.bess_mw,
-                soc_mwh=s.bess_soc * cap,
-                spill_mw=max(0.0, supplied - s.load_mw),
-                shed_mw=round(shed, 3),
-                fuel_kg=s.fuel_kg,
-                carbon_kg=s.carbon_kg,
-                cost_thb=round(cost_thb, 2)
-            ))
-            
-        return {
-            "schedule":        mapped_schedule,
-            "total_cost_thb":  round(isca_res["best_cost"], 2),
-            "total_fuel_kg":   isca_res["total_fuel_kg"],
-            "total_carbon_kg": isca_res["total_carbon_kg"],
-            "diesel_hours":    isca_res["diesel_hours"],
-            "bess_soc_final":  round(mapped_schedule[-1].soc_mwh / cap, 4) if mapped_schedule else initial_soc,
-            "total_spill_mwh": round(sum(s.spill_mw for s in mapped_schedule) / meta["sph"], 3),
-            "total_shed_mwh":  round(total_shed / meta["sph"], 3),
-            "solver_status":   f"ISCA Fallback (MILP msg: {result.message})",
-        }
-    else:
-        x = result.x
-
-    u_sol  = np.round(x[:T]).astype(int)
-    pd_sol = x[T:2*T]
-    pbp_sol = x[2*T:3*T]
-    pbn_sol = x[3*T:4*T]
-    s_sol  = x[4*T:5*T]
-    sp_sol = x[5*T:6*T]
-    sh_sol = x[6*T:7*T]
-
-    schedule: List[HourResult] = []
-    total_fuel = total_carbon = total_cost = 0.0
-    sph = meta["sph"]
-
-    for h in range(T):
-        f_kg, c_kg, cost = _fuel_cost(
-            pd_sol[h], meta["rated"], meta["curve"],
-            meta["d_price"], meta["c_price"]
-        )
-        # Scale fuel/carbon by time step
-        total_fuel   += f_kg / sph
-        total_carbon += c_kg / sph
-        total_cost   += cost # cost already scaled in fuel_cost call or objective?
-        # Actually _fuel_cost returns kg/h, so we must divide by sph
-        
-        bess_net = pbp_sol[h] - pbn_sol[h]
-
-        schedule.append(HourResult(
-            hour=h,
-            load_mw=round(float(load[h]), 3),
-            circuit_mw=round(float(circuit[h]), 3),
-            diesel_mw=round(float(pd_sol[h]), 3),
-            diesel_on=int(u_sol[h]),
-            bess_mw=round(float(bess_net), 3),
-            soc_mwh=round(float(s_sol[h]), 3),
-            spill_mw=round(float(sp_sol[h]), 3),
-            shed_mw=round(float(sh_sol[h]), 3),
-            fuel_kg=round(f_kg / sph, 3),
-            carbon_kg=round(c_kg / sph, 3),
-            cost_thb=round(cost / sph, 2),
-        ))
-
-    return {
-        "schedule":        schedule,
-        "total_cost_thb":  round(sum(s.cost_thb for s in schedule), 2),
-        "total_fuel_kg":   round(total_fuel, 2),
-        "total_carbon_kg": round(total_carbon, 2),
-        "diesel_hours":    int(u_sol.sum()), # this is actually diesel steps
-        "bess_soc_final":  round(float(s_sol[-1]) / cap, 4) if s_sol.any() else initial_soc,
-        "total_spill_mwh": round(float(sp_sol.sum()) / sph, 3),
-        "total_shed_mwh":  round(float(sh_sol.sum()) / sph, 3),
-        "solver_status":   result.message,
+    return c_obj, integrality, bounds, constraints, {
+        "tao_rated": tao_rated, "pha_rated": pha_rated, "sam_rated": sam_rated,
+        "curve": curve, "d_price": oc["diesel_price_per_kg"], "c_price": oc["carbon_price_per_kg"],
+        "bess_cap": bess_cap, "sph": sph
     }
+
+def cluster_optimize(loads: Dict[str, np.ndarray], kmb_headroom: np.ndarray,
+                     initial_soc: float = 0.65, cfg: dict | None = None,
+                     cable_cap: np.ndarray | None = None, 
+                     distal_cap: np.ndarray | None = None) -> dict:
+    if cfg is None:
+        with open("config.yaml") as f: cfg = yaml.safe_load(f)
+    
+    T = len(loads["tao"])
+    caps = {
+        "kmb": kmb_headroom,
+        "cable": cable_cap if cable_cap is not None else np.full(T, 30.0),
+        "capacity": distal_cap if distal_cap is not None else np.full(T, 16.0)
+    }
+    
+    bess_cap = cfg["bess"]["capacity_mwh"]
+    c_obj, integrality, bounds, constraints, meta = _build_cluster_milp(
+        loads, caps, initial_soc * bess_cap, cfg
+    )
+    result = milp(c_obj, constraints=constraints, integrality=integrality, bounds=bounds,
+                  options={"time_limit": 60.0})
+    if not result.success:
+        return {"status": "FAILED", "message": result.message}
+    
+    x = result.x
+    pt_sol = x[T:2*T]; pp_sol = x[3*T:4*T]; ps_sol = x[5*T:6*T]
+    pbp_sol = x[6*T:7*T]; pbn_sol = x[7*T:8*T]; s_sol = x[8*T:9*T]
+    P_main_sol = x[9*T:10*T]; P_SP_sol = x[10*T:11*T]; P_PT_sol = x[11*T:12*T]
+    shed_sol = x[12*T:13*T]
+    
+    schedule = []
+    total_fuel = total_carbon = 0.0
+    sph = meta["sph"]; dt = 1.0 / sph
+    for h in range(T):
+        f_t, c_t, _ = _fuel_cost(pt_sol[h], meta["tao_rated"], meta["curve"], 0, 0)
+        f_p, c_p, _ = _fuel_cost(pp_sol[h], meta["pha_rated"], meta["curve"], 0, 0)
+        f_s, c_s, _ = _fuel_cost(ps_sol[h], meta["sam_rated"], meta["curve"], 0, 0)
+        step_fuel = (f_t + f_p + f_s) * dt; step_carb = (c_t + c_p + c_s) * dt
+        total_fuel += step_fuel; total_carbon += step_carb
+        schedule.append(ClusterStepResult(
+            hour=h, tao_load=loads["tao"][h], pha_load=loads["pha"][h], sam_load=loads["sam"][h],
+            tao_gen=pt_sol[h], pha_gen=pp_sol[h], sam_gen=ps_sol[h],
+            bess_mw=pbp_sol[h] - pbn_sol[h], bess_soc=s_sol[h] / (bess_cap + 1e-6) if bess_cap > 0 else 0.0,
+            flow_main=P_main_sol[h], flow_sp=P_SP_sol[h], flow_pt=P_PT_sol[h],
+            shed_total=shed_sol[h], fuel_kg=step_fuel, carbon_kg=step_carb,
+            cost_thb=step_fuel * (meta["d_price"] + 2.68 * meta["c_price"])
+        ))
+    return {"status": "SUCCESS", "schedule": schedule, "total_fuel_kg": round(total_fuel, 2),
+            "total_carbon_kg": round(total_carbon, 2), "total_cost_thb": round(sum(s.cost_thb for s in schedule), 2),
+            "bess_soc_final": schedule[-1].bess_soc if bess_cap > 0 else initial_soc}
+
+def pea_optimize(load, circuit, initial_soc=0.65, cfg=None):
+    loads = {"tao": load, "pha": np.zeros_like(load), "sam": np.zeros_like(load)}
+    # Backward compatibility for single-island PoC
+    res = cluster_optimize(loads, kmb_headroom=np.full_like(load, 174.0), 
+                           initial_soc=initial_soc, cfg=cfg, distal_cap=circuit)
+    if res["status"] == "FAILED": return {"solver_status": res["message"]}
+    return res

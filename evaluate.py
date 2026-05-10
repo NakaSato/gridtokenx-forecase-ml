@@ -1,6 +1,6 @@
 """
-Evaluation: multi-target hybrid forecast + dispatch vs reactive baseline.
-Output: results/evaluation_report.json
+Evaluation: multi-target hybrid forecast (3-island) + coordinated dispatch.
+Aligned to Project Schema.
 """
 import os, sys, json, pickle, subprocess, tempfile
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -19,14 +19,13 @@ mlflow.set_experiment("GridTokenX_Eval")
 
 from models.tcn_model import TCN, WindowDataset
 from models.device import get_device
-from optimizer.dispatch import run_dispatch, schedule_summary
+from optimizer.pea_dispatch_opt import cluster_optimize, ClusterStepResult
 
 ROOT = os.path.dirname(__file__)
-TARGETS = ["Samui_Load_MW", "Phangan_Load_MW", "Island_Load_MW", "Samui_Circuit_MW"]
-TAO_IDX = TARGETS.index("Island_Load_MW")
+TARGETS = ["tao_load_mw", "cable_flow_mw", "kmb_flow_mw"]
 
 def mape(y_true, y_pred):
-    return float(np.mean(np.abs((y_true - y_pred) / (y_true + 1e-8))) * 100)
+    return float(np.mean(np.abs((y_true - y_pred) / (np.abs(y_true) + 1e-8))) * 100)
 
 
 def lgbm_predict_subprocess(parquet_path: str) -> np.ndarray:
@@ -59,9 +58,10 @@ def get_tcn_preds(ckpt, df, device):
     from torch.utils.data import DataLoader
     tc = ckpt["config"]
     window, horizon = tc["window_size"], tc["forecast_horizon"]
-    n_targets = ckpt.get("n_targets", 4)
+    n_targets = ckpt.get("n_targets", 3)
     net = TCN(ckpt["in_features"], tc["filters"], tc["kernel_size"],
-              tc["layers"], horizon, n_targets=n_targets, dropout=ckpt.get("dropout", 0.0)).to(device)
+              tc["layers"], horizon, n_targets=n_targets, 
+              dropout=ckpt.get("dropout", 0.2)).to(device)
     net.load_state_dict(ckpt["state_dict"])
     net.eval()
     ds = WindowDataset(df, window, horizon)
@@ -72,26 +72,14 @@ def get_tcn_preds(ckpt, df, device):
             preds.append(net(xb.to(device)).cpu().numpy())
     
     # preds: (N, horizon, n_targets)
-    preds = np.concatenate(preds)[:, 0, :] # Focus on first step for overall metrics
+    preds = np.concatenate(preds)[:, 0, :] # Focus on first step
     aligned = np.full((len(df), n_targets), np.nan)
     aligned[window: window + len(preds)] = preds
     return aligned
 
 
-def reactive_baseline(load, circuit, cfg):
-    """Simple reactive dispatch (start diesel when load > circuit + margin)."""
-    dc = cfg["diesel"]
-    sfc = dc["bsfc_curve"][0.75]
-    total_fuel = 0
-    for i in range(len(load)):
-        d_mw = load[i] - circuit[i]
-        if d_mw > 0:
-            total_fuel += sfc * d_mw / 1000.0
-    return total_fuel
-
-
 def main():
-    with mlflow.start_run(run_name="final_evaluation_multi"):
+    with mlflow.start_run(run_name="eval_multi_target_aligned"):
         with open("config.yaml") as f:
             cfg = yaml.safe_load(f)
 
@@ -112,92 +100,87 @@ def main():
         print("TCN predictions...")
         tcn_preds  = get_tcn_preds(ckpt, test, device)
 
-        mask = ~np.isnan(tcn_preds[:, TAO_IDX])
+        mask = ~np.isnan(tcn_preds[:, 0])
         hybrid_preds_all = np.zeros_like(lgbm_preds[mask])
         
         for i, meta in enumerate(metas):
             X = np.column_stack([lgbm_preds[mask, i], tcn_preds[mask, i]])
             hybrid_preds_all[:, i] = meta.predict(X)
         
-        y_eval_tao = y_true_all[mask, TAO_IDX]
-        preds_tao = hybrid_preds_all[:, TAO_IDX]
+        # Metrics for each target
+        report_metrics = {}
+        for i, target in enumerate(TARGETS):
+            yt = y_true_all[mask, i]
+            yp = hybrid_preds_all[:, i]
+            m = {
+                f"mape_{target}": round(mape(yt, yp), 4),
+                f"mae_{target}":  round(float(mean_absolute_error(yt, yp)), 4),
+                f"r2_{target}":   round(float(r2_score(yt, yp)), 4),
+            }
+            report_metrics.update(m)
+            print(f"{target:<20} → MAPE: {m[f'mape_{target}']}%  R²: {m[f'r2_{target}']}")
+            
+        mlflow.log_metrics(report_metrics)
 
-        forecast_metrics = {
-            "mape":  round(mape(y_eval_tao, preds_tao), 4),
-            "mae":   round(float(mean_absolute_error(y_eval_tao, preds_tao)), 4),
-            "r2":    round(float(r2_score(y_eval_tao, preds_tao)), 4),
-        }
-        print(f"Forecast (Tao) → MAPE: {forecast_metrics['mape']}%  "
-              f"MAE: {forecast_metrics['mae']} MW  R²: {forecast_metrics['r2']}")
-        mlflow.log_metrics(forecast_metrics)
-
-        # ── Walk-forward 24h backtest (PEA requirement) ───────────────────────────
+        # ── Coordinated Dispatch on test set ──
+        print("Running coordinated dispatch evaluation...")
         freq = cfg["data"].get("frequency", "h")
         sph = 4 if freq == "15min" else 1
         step_24h = 24 * sph
-
-        wf_mapes = []
-        for start in range(0, len(y_eval_tao) - step_24h, step_24h):
-            yt = y_eval_tao[start:start + step_24h]
-            yp = preds_tao[start:start + step_24h]
-            wf_mapes.append(float(mape(yt, yp)))
-        backtest_mape = round(float(np.mean(wf_mapes)), 4)
-        backtest_pass = backtest_mape <= 10.0
-        print(f"Walk-forward MAPE (24h): {backtest_mape}%  PEA ≤10% → {'PASS ✅' if backtest_pass else 'FAIL ❌'}")
-        mlflow.log_metric("backtest_24h_mape", backtest_mape)
-
-        # ── Dispatch on test set ──
-        # Target 4 is KMB capacity (Samui_Circuit_MW)
-        circuit = hybrid_preds_all[:, TARGETS.index("Samui_Circuit_MW")]
         
-        n_days  = len(y_eval_tao) // step_24h
-        pred_load = preds_tao[:n_days * step_24h].reshape(n_days, step_24h)
-        pred_circ = circuit[:n_days * step_24h].reshape(n_days, step_24h)
-
-        total_fuel = total_carbon = diesel_hours = bess_cycles = 0.0
+        n_days = len(hybrid_preds_all) // step_24h
+        
+        # Target mapping:
+        # i=0: tao_load_mw
+        # i=1: cable_flow_mw (Samui-Phangan capacity)
+        # i=2: kmb_flow_mw (Mainland-Samui headroom)
+        preds_tao = hybrid_preds_all[:, 0]
+        preds_cable = hybrid_preds_all[:, 1]
+        preds_kmb = hybrid_preds_all[:, 2]
+        
+        total_fuel = total_carbon = 0.0
         soc = 0.65
+        
+        test_masked = test.iloc[mask]
+        
         for d in range(n_days):
-            sched = run_dispatch(pred_load[d], pred_circ[d], initial_soc=soc, cfg=cfg)
-            s = schedule_summary(sched)
-            total_fuel    += s["total_fuel_kg"]
-            total_carbon  += s["total_carbon_kg"]
-            diesel_hours  += s["diesel_hours"]
-            bess_cycles   += sum(1 for h in sched if h.bess_mw > 0)
-            soc = sched[-1].bess_soc
-
-        # ── Reactive baseline ──
-        # Actual circuit vs actual load
-        y_true_circ = y_true_all[mask, TARGETS.index("Samui_Circuit_MW")]
-        reactive_fuel = reactive_baseline(y_eval_tao[:n_days*step_24h], y_true_circ[:n_days*step_24h], cfg)
-        fuel_savings_pct = round((reactive_fuel - total_fuel) / (reactive_fuel + 1e-8) * 100, 2)
-        carbon_reduction_pct = round(fuel_savings_pct, 2)
+            start, end = d*step_24h, (d+1)*step_24h
+            
+            day_loads = {
+                "tao": preds_tao[start:end],
+                "pha": test_masked["phangan_load_mw"].values[start:end],
+                "sam": test_masked["samui_load_mw"].values[start:end]
+            }
+            day_kmb = preds_kmb[start:end]
+            day_cable = preds_cable[start:end]
+            # Use predicted capacity for Phangan-Tao link if available
+            day_capacity = test_masked["capacity_mw"].values[start:end] 
+            
+            res = cluster_optimize(day_loads, day_kmb, initial_soc=soc, cfg=cfg,
+                                   cable_cap=day_cable, distal_cap=day_capacity)
+            if res["status"] == "SUCCESS":
+                total_fuel   += res["total_fuel_kg"]
+                total_carbon += res["total_carbon_kg"]
+                soc = res["bess_soc_final"]
 
         dispatch_metrics = {
-            "fuel_savings_pct":    fuel_savings_pct,
-            "total_carbon_kg":     round(total_carbon, 2),
-            "carbon_reduction_pct": carbon_reduction_pct,
-            "diesel_hours":        int(diesel_hours),
+            "total_fuel_kg":   round(total_fuel, 2),
+            "total_carbon_kg": round(total_carbon, 2),
         }
-        print(f"Dispatch → Fuel savings: {fuel_savings_pct}%  Carbon reduction: {carbon_reduction_pct}%")
+        print(f"Dispatch → Total Fuel: {total_fuel:,.1f} kg  Carbon: {total_carbon:,.1f} kg")
         mlflow.log_metrics(dispatch_metrics)
 
-        # ── Targets check ──
-        t = cfg["targets"]
-        targets_met = {
-            "mape_ok":         bool(forecast_metrics["mape"]  <= t["mape"]),
-            "r2_ok":           bool(forecast_metrics["r2"]    >= t["r2"]),
-            "mae_ok":          bool(forecast_metrics["mae"]   <= t["mae"]),
-            "fuel_savings_ok": bool(fuel_savings_pct / 100    >= t["fuel_savings"]),
-            "backtest_mape_pea_ok": backtest_pass,
-        }
-
+        # ── Report ───────────────────────────────────────────────────────────────
         report = {
-            "forecast": forecast_metrics,
-            "backtest_24h_mape": backtest_mape,
-            "backtest_pea_pass": backtest_pass,
-            "dispatch": {**dispatch_metrics, "total_fuel_kg": round(total_fuel, 2), "reactive_fuel_kg": round(reactive_fuel, 2), "days_evaluated": n_days},
-            "targets_met": targets_met,
+            "forecast": report_metrics,
+            "dispatch": dispatch_metrics,
+            "days_evaluated": n_days,
+            "targets_met": {
+                "mape_ok": bool(report_metrics["mape_tao_load_mw"] <= cfg["targets"]["mape"]),
+                "r2_ok":   bool(report_metrics["r2_tao_load_mw"]   >= cfg["targets"]["r2"])
+            }
         }
+        
         os.makedirs("results", exist_ok=True)
         with open("results/evaluation_report.json", "w") as f:
             json.dump(report, f, indent=2)

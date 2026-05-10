@@ -221,8 +221,8 @@ if __name__ == "__main__":
     test = pd.read_parquet("data/processed/test.parquet")
     # Simulate: use actual values as "forecast" for a bottleneck window
     # Find first bottleneck day
-    circuit = test["Circuit_Cap_MW"].values
-    load    = test["Island_Load_MW"].values
+    circuit = test["capacity_mw"].values
+    load    = test["tao_load_mw"].values
     bottleneck_idx = next((i for i in range(len(circuit)-24) if circuit[i] < 5), 0)
 
     load_fc    = load[bottleneck_idx: bottleneck_idx + 24]

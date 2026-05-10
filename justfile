@@ -46,7 +46,7 @@ train: preprocess lgbm tcn hybrid
 eval:
     {{python}} evaluate.py
 
-# Run PEA MILP dispatch optimization (7-day test)
+# Run Coordinated Cluster MILP dispatch optimization (7-day test)
 optimize:
     {{python}} optimizer/run_optimization.py
 
@@ -81,11 +81,20 @@ colab-train:
         --exclude='.git' --exclude='.venv' --exclude='__pycache__' \
         --exclude='node_modules' --exclude='frontend' \
         --exclude='data/raw' \
-        --exclude='mlruns' --exclude='mlflow_colab.db' \
+        --exclude='mlruns' \
+        --exclude='mlflow_colab.db' \
         --exclude='models/*.pkl' --exclude='models/*.pt' .
     colab-cli file upload /tmp/gridtokenx.tar.gz /content/gridtokenx.tar.gz
     colab-cli server run bash -lc \
-        'mkdir -p /content/gridtokenx && tar -xzf /content/gridtokenx.tar.gz -C /content/gridtokenx && pip install -q lightgbm torch pandas numpy scikit-learn pyarrow pyyaml mlflow optuna && cd /content/gridtokenx && python colab_train.py 2>&1 | tee /tmp/train.log'
+        'mkdir -p /content/gridtokenx && tar -xzf /content/gridtokenx.tar.gz -C /content/gridtokenx && pip install -q lightgbm torch pandas numpy scikit-learn pyarrow pyyaml mlflow optuna && cd /content/gridtokenx && python colab_train.py'
+    @echo "📥 Downloading artifacts..."
+    mkdir -p /tmp/gridtokenx_dl
+    colab-cli server run bash -lc "tar -cz -C /content/gridtokenx models results | base64" > /tmp/artifacts.b64
+    # Clean up base64 output (remove any non-base64 lines if colab-cli adds headers)
+    grep -E '^[A-Za-z0-9+/=]+$' /tmp/artifacts.b64 > /tmp/artifacts_clean.b64
+    base64 -D -i /tmp/artifacts_clean.b64 -o /tmp/artifacts.tar.gz
+    tar -xzf /tmp/artifacts.tar.gz -C .
+    @echo "✅ Artifacts synced to local models/ and results/"
 
 # ── PostGIS ────────────────────────────────────────────────────────────────────
 
@@ -121,46 +130,22 @@ logs:
 tune trials="50":
     {{python}} optimizer/tune.py --trials {{trials}}
 
-# ── PEA Onboarding ───────────────────────────────────────────────────────────
+# ── PEA Onboarding (AWS Sandbox) ──────────────────────────────────────────────
 
-# Onboard real PEA SCADA data: distribution check, scaler refit, meta-learner refit, backtest
-pea-onboard input="data/raw/pea_telemetry_raw.csv" calib="3":
+# Aggregate raw PEA AWS Sandbox files into multi-island ground truth
+pea-integrate dir="data/raw/pea_aws_sandbox":
+    {{python}} data/integrate_pea_raw.py --dir {{dir}}
+
+# Onboard real PEA SCADA data: multi-target distribution check + meta-learner refit
+pea-onboard input="data/processed/pea_ground_truth.parquet" calib="3":
     {{python}} data/pea_onboard.py --input {{input}} --calib-months {{calib}}
 
-# Backtest only (no model refit) — safe for read-only audit
-pea-backtest input="data/raw/pea_telemetry_raw.csv":
+# Backtest only (no model refit) on multi-target ground truth
+pea-backtest input="data/processed/pea_ground_truth.parquet":
     {{python}} data/pea_onboard.py --input {{input}} --no-refit
 
-# ── 2026 Strategy & Commissioning ──────────────────────────────────────────
-
-# Run 12-month backtest (May 2025 - Apr 2026)
-backtest-12m:
-    PYTHONPATH=. {{python}} research/backtest_12m.py
-
-# Run N-1 contingency stress test (April 2026)
-stress-test:
-    PYTHONPATH=. {{python}} research/contingency_analysis.py
-
-# Run Cluster-wide ADMM bottleneck test
-cluster-test:
-    PYTHONPATH=. {{python}} research/cluster_stress_test.py
-
-# Run Monte Carlo stochastic resilience test (N=500)
-stochastic-test n="500":
-    PYTHONPATH=. {{python}} research/monte_carlo_engine.py {{n}}
-
-# Run Optimal Power Flow (OPF) analysis
-opf-test:
-    PYTHONPATH=. {{python}} research/optimal_power_flow.py
-
-# Generate holistic diagnostic report
-diagnose:
-    PYTHONPATH=. {{python}} research/diagnose_grid.py
-
-# Generate commissioning report and dashboard
-report: backtest-12m stress-test cluster-test stochastic-test opf-test
-    {{python}} results/plot_2026_strategy.py
-    @echo "✅ Commissioning report and dashboard ready in results/"
+# Run full integration and onboarding sequence
+pea-full dir="data/raw/pea_aws_sandbox": pea-integrate pea-onboard
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 
@@ -170,6 +155,8 @@ setup:
 
 # Remove generated artifacts
 clean:
-    rm -f data/processed/train.parquet data/processed/val.parquet data/processed/test.parquet data/processed/scaler.pkl
-    rm -f models/lgbm.pkl models/tcn.pt models/meta_learner.pkl
-    rm -f results/evaluation_report.json results/pea_optimization_report.json
+    rm -f data/processed/*.parquet data/processed/*.pkl
+    rm -f models/*.pkl models/*.pt
+    rm -f results/*.json results/*.png
+    rm -f mlflow.db api_state.db
+    find . -name "__pycache__" -type d -exec rm -rf {} +

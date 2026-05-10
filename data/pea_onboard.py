@@ -114,14 +114,14 @@ def distribution_check(pea_df: pd.DataFrame, syn_path: str) -> dict:
 
 def recalibrate_scaler(calib_df: pd.DataFrame, cfg: dict) -> tuple:
     """Refit scaler on PEA calibration window. Returns (fe_df, new_scaler)."""
-    df = impute_bess_soc(calib_df, cfg)
-    df = engineer_features(df, cfg)
+    df = engineer_features(calib_df, cfg)
+    df = impute_bess_soc(df, cfg)
 
     exclude = {
-        "Island_Load_MW", "Is_High_Season", "Hour_of_Day", "Day_of_Week",
-        "Load_Lag_1h", "Load_Lag_24h", "Load_Lag_168h",
-        "Load_Roll_Mean_3h", "Load_Roll_Std_3h",
-        "Load_Roll_Mean_6h", "Load_Roll_Std_6h",
+        "tao_load_mw", "is_high_season", "hour_of_day", "day_of_week",
+        "tao_load_mw_lag_1h", "tao_load_mw_lag_24h",
+        "tao_load_roll_mean_3h", "tao_load_roll_std_3h",
+        "tao_load_roll_mean_6h", "tao_load_roll_std_6h",
     }
     num_cols = [c for c in df.select_dtypes(include=np.number).columns
                 if c not in exclude]
@@ -135,8 +135,8 @@ def recalibrate_scaler(calib_df: pd.DataFrame, cfg: dict) -> tuple:
 
 def apply_scaler(df: pd.DataFrame, scaler: StandardScaler,
                  num_cols: list, cfg: dict) -> pd.DataFrame:
-    df = impute_bess_soc(df, cfg)
     df = engineer_features(df, cfg)
+    df = impute_bess_soc(df, cfg)
     df_scaled = df.copy()
     cols_present = [c for c in num_cols if c in df.columns]
     df_scaled.loc[:, cols_present] = scaler.transform(df[cols_present])
@@ -207,7 +207,7 @@ def refit_meta_learner(calib_scaled: pd.DataFrame) -> Ridge:
 
     mask = ~np.isnan(tcn_preds)
     X    = np.column_stack([lgbm_preds[mask], tcn_preds[mask]])
-    y    = calib_scaled["Island_Load_MW"].values[mask]
+    y    = calib_scaled["tao_load_mw"].values[mask]
 
     meta = Ridge(alpha=1.0)
     meta.fit(X, y)
@@ -231,7 +231,7 @@ def backtest(backtest_scaled: pd.DataFrame, meta: Ridge) -> dict:
     mask = ~np.isnan(tcn_preds)
     X    = np.column_stack([lgbm_preds[mask], tcn_preds[mask]])
     hybrid = meta.predict(X)
-    y_true = backtest_scaled["Island_Load_MW"].values[mask]
+    y_true = backtest_scaled["tao_load_mw"].values[mask]
 
     overall_mape = mape(y_true, hybrid)
     overall_mae  = float(mean_absolute_error(y_true, hybrid))

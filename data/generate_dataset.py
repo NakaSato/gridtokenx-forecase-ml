@@ -227,6 +227,7 @@ def generate(cfg):
     months = idx.month.to_numpy()
     is_high = np.isin(months, dc["high_season_months"]).astype(float)
     tourist_index = (0.6 + 0.3 * is_high + 0.05 * rng.standard_normal(n)).clip(0.2, 1.0)
+    wind_speed = (4.0 + 2.0 * np.sin(2 * np.pi * (months - 6) / 12) + rng.rayleigh(2.0, n)).clip(0, 25.0)
 
     # Per-island generation
     tao_load,     tao_temp,     tao_hum,     tao_cap,     tao_soc     = generate_ko_tao(idx, dc, bc, rng, assets, sim)
@@ -262,6 +263,7 @@ def generate(cfg):
         "Dry_Bulb_Temp":     tao_temp.round(2),
         "Rel_Humidity":      tao_hum.round(1),
         "Solar_Irradiance":  irradiance.round(1),
+        "Wind_Speed":        wind_speed.round(2),
         "Carbon_Intensity":  carbon_intensity.round(1),
         "Market_Price":      market_price.round(2),
         "Tourist_Index":     tourist_index.round(3),

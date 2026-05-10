@@ -7,6 +7,8 @@ MLflow tracking local only; artifacts auto-downloaded at end.
 import os, subprocess, sys
 
 os.chdir("/content/gridtokenx")
+sys.path.insert(0, os.getcwd())
+os.environ["PYTHONPATH"] = os.getcwd()
 os.environ["MLFLOW_TRACKING_URI"] = "sqlite:////content/mlflow_colab.db"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["COLAB_TRAIN"] = "1"   # disables mlflow.sklearn.log_model in lgbm_model.py

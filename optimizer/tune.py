@@ -115,7 +115,7 @@ def objective(trial):
     
     # 5. Hybrid Evaluation
     # TCN preds are for indices [window : window + len(tcn_preds_raw)]
-    y_true = val_df["Island_Load_MW"].values[window : window + len(tcn_preds_raw)]
+    y_true = val_df["tao_load_mw"].values[window : window + len(tcn_preds_raw)]
     lgbm_preds_aligned = lgbm_preds[window : window + len(tcn_preds_raw)]
     
     hybrid_preds = (lgbm_preds_aligned + tcn_preds_raw) / 2

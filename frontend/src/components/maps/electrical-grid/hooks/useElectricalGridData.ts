@@ -41,39 +41,12 @@ export const useElectricalGridData = (
   const fetchRef = useRef(false);
 
   const fetchData = useCallback(async () => {
-    try {
-      if (!fetchRef.current) setLoading(prev => prev ? true : false);
-      setError(null);
-
-      const response = await fetch(getApiUrl('/api/v1/grid/substations'));
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const data = await response.json();
-      const rawItems = data.infrastructure || data.substations || [];
-      const infraData: ElectricalInfrastructure[] = rawItems
-        .map((item: any) => ({
-          ...item,
-          latitude: item.latitude ?? item.lat,
-          longitude: item.longitude ?? item.lon,
-          status: item.status === 'in_service' ? 'operational' : item.status
-        }))
-        .filter((item: any) => typeof item.latitude === 'number' && typeof item.longitude === 'number');
-
-      setInfrastructure(infraData);
-      setStats(data.stats || calculateStats(infraData));
-      setLastRefresh(new Date());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-    } finally {
-      setLoading(false);
-      fetchRef.current = true;
-    }
-  }, [getApiUrl]);
+    // fetchData removed to avoid 502 errors
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, refreshIntervalMs);
-    return () => clearInterval(interval);
   }, [fetchData, refreshIntervalMs]);
 
   return { infrastructure, stats, loading, error, lastRefresh, refresh: fetchData };

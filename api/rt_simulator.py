@@ -46,22 +46,23 @@ def circuit_for_hour(h: int) -> float:
 
 
 def row_to_telemetry(row: pd.Series) -> dict:
-    return {
-        "island_load_mw":  float(row["Island_Load_MW"]),
-        "load_lag_1h":     float(row["Load_Lag_1h"]),
-        "load_lag_24h":    float(row["Load_Lag_24h"]),
-        "bess_soc_pct":    float(row["BESS_SoC_Pct"]),
-        "headroom_mw":     float(row.get("Headroom_MW", 0.0)),
-        "dry_bulb_temp":   float(row["Dry_Bulb_Temp"]),
-        "heat_index":      float(row["Heat_Index"]),
-        "rel_humidity":    float(row["Rel_Humidity"]),
-        "hour_of_day":     float(row["Hour_of_Day"]),
-        "is_high_season":  float(row["Is_High_Season"]),
-        "is_thai_holiday": float(row.get("Is_Thai_Holiday", 0.0)),
-    }
+    # 1. Per-location load + weather
+    # 2. System state
+    # 3. Calendar + Market
+    # 4. Critical Lags + Targets
+    # Note: row index in test.parquet is already lowercase after engineer_features
+    res = {}
+    from models.tcn_model import SEQ_FEATURES
+    for f in SEQ_FEATURES:
+        res[f] = float(row[f]) if f in row.index else 0.0
+    
+    # Explicitly add tao_load_mw (target) which is required by TelemetryRow schema
+    res["tao_load_mw"] = float(row["tao_load_mw"])
+    return res
 
 
 def lgbm_features_for(row: pd.Series) -> dict:
+    from models.lgbm_model import FEATURES as LGBM_FEATURES
     return {k: float(row[k]) for k in LGBM_FEATURES if k in row.index}
 
 
@@ -146,8 +147,8 @@ def main():
             ts  = df.index[i]
             
             # Apply dynamic stress multiplier for demo purposes
-            actual = float(row["Island_Load_MW"]) * STRESS_MULTIPLIER
-            row["Island_Load_MW"] = actual
+            tao_load_mw = float(row["tao_load_mw"]) * STRESS_MULTIPLIER
+            row["tao_load_mw"] = tao_load_mw
             
             # ... payload building ...
             tel = row_to_telemetry(row)
@@ -164,7 +165,7 @@ def main():
                 last_forecast = data["forecast_mw"]
                 forecast_step = 0
 
-            actual = float(row["Island_Load_MW"])
+            actual = float(row["tao_load_mw"])
             fc_val = 0.0
             metrics = {}
 
