@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(just *)"
+      "Bash(just *)",
+      "Bash(sed *)",
+      "Bash(.venv/bin/python *)",
+      "Bash(du *)",
+      "Bash(find *)",
+      "Bash(colab-cli *)",
+      "Bash(echo *)"
     ]
-  }
+  },
+  "$version": 4
 }

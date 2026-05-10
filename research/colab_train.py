@@ -19,7 +19,7 @@ steps = [
     ("LightGBM",          "python models/lgbm_model.py"),
     ("TCN",               "python models/tcn_model.py"),
     ("Hybrid+Backtest",   "python models/hybrid_pipeline.py"),
-    ("Evaluate",          "python evaluate.py"),
+    ("Evaluate",          "python research/evaluate.py"),
 ]
 
 for name, cmd in steps:

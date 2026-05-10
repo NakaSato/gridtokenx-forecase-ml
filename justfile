@@ -44,7 +44,7 @@ train: preprocess lgbm tcn hybrid
 
 # Evaluate forecast + dispatch vs PEA targets
 eval:
-    {{python}} evaluate.py
+    {{python}} research/evaluate.py
 
 # Run Coordinated Cluster MILP dispatch optimization (7-day test)
 optimize:
@@ -86,7 +86,7 @@ colab-train:
         --exclude='models/*.pkl' --exclude='models/*.pt' .
     colab-cli file upload /tmp/gridtokenx.tar.gz /content/gridtokenx.tar.gz
     colab-cli server run bash -lc \
-        'mkdir -p /content/gridtokenx && tar -xzf /content/gridtokenx.tar.gz -C /content/gridtokenx && pip install -q lightgbm torch pandas numpy scikit-learn pyarrow pyyaml mlflow optuna && cd /content/gridtokenx && python colab_train.py'
+        'mkdir -p /content/gridtokenx && tar -xzf /content/gridtokenx.tar.gz -C /content/gridtokenx && pip install -q lightgbm torch pandas numpy scikit-learn pyarrow pyyaml mlflow optuna && cd /content/gridtokenx && python research/colab_train.py'
     @echo "📥 Downloading artifacts..."
     mkdir -p /tmp/gridtokenx_dl
     colab-cli server run bash -lc "tar -cz -C /content/gridtokenx models results | base64" > /tmp/artifacts.b64

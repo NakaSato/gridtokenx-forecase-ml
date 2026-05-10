@@ -17,7 +17,7 @@ import mlflow
 import mlflow.sklearn
 from sklearn.multioutput import MultiOutputRegressor
 from models.mlflow_utils import setup_mlflow
-from schema import TAB_FEATURES as FEATURES, TARGETS
+from models.schema import TAB_FEATURES as FEATURES, TARGETS
 
 setup_mlflow()
 mlflow.set_experiment("GridTokenX_LGBM")

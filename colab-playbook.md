@@ -49,7 +49,7 @@ colab-cli server run bash -lc 'git clone https://github.com/NakaSato/gridtokenx-
 colab-cli server run bash -lc 'cd /content/gridtokenx && pip install -q -r requirements.txt'
 
 # 4. Run full pipeline
-colab-cli server run bash -lc 'cd /content/gridtokenx && python colab_train.py'
+colab-cli server run bash -lc 'cd /content/gridtokenx && python research/colab_train.py'
 
 # 5. Download results
 colab-cli server run bash -lc 'cd /content/gridtokenx && tar czf /tmp/results.tar.gz models/ data/processed/ results/'

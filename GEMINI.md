@@ -93,7 +93,7 @@ The project uses `just` for most tasks. Run `just` to see all available recipes.
 
 ### Key Practices
 - **MLflow Tracking:** All training runs logged to MLflow. Experiment names: `GridTokenX` (training), `GridTokenX_API` (serving). Local UI on port 5000 via `docker-compose`.
-- **Subprocess Safety:** On macOS, LightGBM inference is run in isolated subprocesses (see `models/hybrid_pipeline.py`, `evaluate.py`) to avoid OpenMP conflicts with PyTorch.
+- **Subprocess Safety:** On macOS, LightGBM inference is run in isolated subprocesses (see `models/hybrid_pipeline.py`, `research/evaluate.py`) to avoid OpenMP conflicts with PyTorch.
 - **Config Management:** Use `config.yaml` for grid parameters (diesel ratings, BESS capacity), training hyperparameters, cluster settings, and PEA targets.
 - **Type Safety:** Use Pydantic schemas in `api/serve.py` for all telemetry and forecast requests.
 - **Streaming State:** `StreamingEngine` persists telemetry buffer and metrics to SQLite (`api_state.db`), surviving API restarts.

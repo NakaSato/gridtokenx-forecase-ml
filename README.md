@@ -5,6 +5,27 @@
 [![R2 Stability](https://img.shields.io/badge/R2_Score-0.955-blue.svg)](#)
 [![2026 Strategy](https://img.shields.io/badge/Status-2026_Commissioned-gold.svg)](#)
 
+GridTokenX: Predictive Intelligence Research Lab is an AI forecasting and power dispatch research project. It is specifically designed to solve power grid challenges—like bottleneck congestion and diesel generator efficiency—for the islanded microgrid cluster of Ko Tao, Ko Phangan, and Ko Samui in Thailand.
+
+Here is a summary of its technical architecture and purpose based on the codebase structure:
+
+1. Goal & Context
+The project serves as a high-fidelity environment to train and benchmark models for power load forecasting under a "2026 Commissioning Strategy." Since historical data for these islands is missing, the system generates synthetic physics-based proxies to simulate the load, factoring in modern grid updates (like a new 115 kV undersea cable) and severe stressors (like N-1 total cable failures).
+
+2. Machine Learning Architecture (Hybrid Meta-Learner)
+The core AI engine uses a hybrid approach to achieve very high accuracy (MAPE < 2.92%):
+
+Sequential Layer (TCN): A PyTorch-based Temporal Convolutional Network that captures long-term patterns, like tourism-driven load curves.
+Tabular Layer (LightGBM): Handles non-linear weather impacts like heat indexes and dry-bulb temperatures.
+Meta-Learner (Ridge): Blends the two models to output the final load forecast.
+Optimization & Tracking: Uses Optuna for hyperparameter tuning and MLflow for experiment tracking and model registry.
+
+3. Tech Stack
+Python / ML: torch, lightgbm, optuna, mlflow, scikit-learn.
+Power Systems Analysis: pypsa, pandapower (for simulating the electrical grid and ADMM coordination).
+Backend API: FastAPI (api/serve.py) to serve the ML models.
+Frontend: A Next.js/React web app (located in the frontend/ folder) to visualize commissioning dashboards and reports.
+Task Runner: just is used to trigger backtests, stress tests, and training pipelines.
 ## Research Objective
 This codebase provides a high-fidelity environment for training and benchmarking predictive AI models for islanded microgrids. It is specifically tuned to solve the **bottleneck congestion** and **diesel efficiency** problems of the Ko Tao-Phangan-Samui cluster.
 
@@ -137,7 +158,7 @@ python models/tcn_model.py
 python models/hybrid_pipeline.py
 
 # 5. Evaluate vs. Real-World Benchmarks
-python evaluate.py
+python research/evaluate.py
 ```
 
 ## Benchmarking Datasets
@@ -176,7 +197,7 @@ PEA 115 kV/33 kV radial topology for the Ko Tao–Phangan–Samui cluster.
   ┌──────┴──────────────────────────────────────────────────────────────────┐
   │  KO SAMUI SUBSTATION RING                                               │
   │  Base: Unknown  |  Peak: Unknown  |  BESS 50 MWh / 8 MW                    │
-  │  Diesel Backup (EGAT + Mobile) for N-1 stability                        │
+  │  Diesel Backup (EGAT + Mobile)                                          │
   └──────┬──────┘
          │
          │ SAMUI – PHANGAN CONNECTOR (115 kV + 33 kV)
@@ -185,7 +206,7 @@ PEA 115 kV/33 kV radial topology for the Ko Tao–Phangan–Samui cluster.
   │  KO PHANGAN SUBSTATION                                                  │
   │  Base: Unknown  |  Peak: Unknown  |  BESS 50 MWh / 8 MW                    │
   └──────┬──────┘
-         │
+         
          │ PHANGAN – TAO RADIAL LINK
          │ └─ 33 kV XLPE (⚡ Excess Power: 0 – 16 MW)
          │

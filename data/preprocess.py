@@ -224,7 +224,7 @@ def main():
     test  = df[(df.index >= dc["test_start"]) & (df.index <= dc["test_end"])]
 
     # ── Schema Validation ──
-    from schema import SEQ_FEATURES, TAB_FEATURES, TARGETS
+    from models.schema import SEQ_FEATURES, TAB_FEATURES, TARGETS
     required = set(SEQ_FEATURES + TAB_FEATURES + TARGETS)
     missing = required - set(df.columns)
     if missing:

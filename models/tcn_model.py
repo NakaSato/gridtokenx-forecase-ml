@@ -16,7 +16,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import yaml
 import mlflow
-from schema import SEQ_FEATURES, TARGETS
+from models.schema import SEQ_FEATURES, TARGETS
 from models.device import get_device
 from models.mlflow_utils import setup_mlflow
 

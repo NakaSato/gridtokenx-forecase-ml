@@ -34,7 +34,7 @@
   │  Base: Unknown  |  Peak: Unknown  |  Events: Seasonal / Event Spikes     │
   │                                                                         │
   │  ┌─────────────────┐    ┌──────────────────────────────────────────┐   │
-  │  │  BESS (Node 7)  │    │  DIESEL BACKUP (EGAT Node 9)             │   │
+  │  │  BESS           │    │  DIESEL BACKUP (EGAT Node 9)             │   │
   │  │  50 MWh / 8 MW  │    │  Spinning Reserve for N-1 events         │   │
   │  │  SoC: 20–80%    │    │  Primary Frequency Regulation Node        │   │
   │  └─────────────────┘    └──────────────────────────────────────────┘   │

@@ -456,7 +456,7 @@ def health():
 @app.get("/metrics")
 def metrics():
     path = os.path.join(ROOT, "results/evaluation_report.json")
-    if not os.path.exists(path): raise HTTPException(404, "Run evaluate.py first.")
+    if not os.path.exists(path): raise HTTPException(404, "Run research/evaluate.py first.")
     with open(path) as f: return json.load(f)
 
 

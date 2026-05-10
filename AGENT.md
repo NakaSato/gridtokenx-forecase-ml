@@ -68,7 +68,7 @@ data/preprocess.py          → multi-target engineering + MSTL KMB decompositio
 models/lgbm_model.py        → models/lgbm.pkl (Multi-Target)
 models/tcn_model.py         → models/tcn.pt (Multi-Target)
 models/hybrid_pipeline.py   → models/meta_learner.pkl (Parallel Ridge)
-evaluate.py                 → results/evaluation_report.json
+research/evaluate.py          → results/evaluation_report.json
 optimizer/run_optimization.py → Coordinated Cluster MILP runner
 api/serve.py                → Multi-island real-time serving
 optimizer/pea_dispatch_opt.py → Coordinated Cluster MILP (Radial Chain Aware)
@@ -127,7 +127,7 @@ Training runs on Colab L4/T4 GPU. Multi-target pipeline generates `.pt` and `.pk
 
 ```bash
 just colab-train
-# Follow manual download instructions in colab_train.py if needed
+# Follow manual download instructions in research/colab_train.py if needed
 ```
 
 ---
@@ -137,3 +137,4 @@ just colab-train
 1. **PEA AWS Sandbox Integration** — Onboarding scripts ready (`just pea-full`), pending raw file placement in `data/raw/pea_aws_sandbox`.
 2. **BESS Logic** — Samui BESS currently optimized for KMB bottleneck; Phangan remains vulnerable with zero local generation/storage.
 3. **API Auth** — Missing security layer for production telemetry ingestion.
+stion.

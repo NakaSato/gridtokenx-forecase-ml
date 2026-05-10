@@ -15,7 +15,7 @@ COPY pyproject.toml requirements.txt ./
 RUN uv pip install --system --no-cache -r requirements.txt
 
 # Source code
-COPY config.yaml evaluate.py main.py ./
+COPY config.yaml ./
 COPY api/       ./api/
 COPY models/    ./models/
 COPY optimizer/ ./optimizer/

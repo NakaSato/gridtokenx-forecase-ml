@@ -54,7 +54,7 @@ def main():
     
     # --- STAGE 5: VALIDATION ---
     print("\n--- [STAGE 5] VALIDATION ---")
-    run_step("Final Backtest & Electrical Check", ".venv/bin/python evaluate.py")
+    run_step("Final Backtest & Electrical Check", ".venv/bin/python research/evaluate.py")
     run_step("Generating Commissioning Report", ".venv/bin/python research/generate_report.py")
     
     print("\n" + "="*52)
