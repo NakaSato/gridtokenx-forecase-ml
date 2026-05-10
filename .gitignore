@@ -78,3 +78,5 @@ data/geojson/cleaned/egat_combined_load.geojson
 data/geojson/cleaned/egat_gen_zones.geojson
 data/geojson/cleaned/egat_combined_gen.geojson
 
+.vercel
+.env*.local
