@@ -147,6 +147,7 @@ def schedule_summary(schedule: List[HourlyDispatch]) -> dict:
     
     return {
         "total_fuel_kg": round(total_fuel, 2),
+        "total_carbon_kg": round(total_fuel * 2.68, 2),
         "diesel_hours": sum(1 for s in schedule if s.diesel_mw > 0),
         "max_units_active": max(step_plan) if step_plan else 0,
         "step_plan_units": step_plan,

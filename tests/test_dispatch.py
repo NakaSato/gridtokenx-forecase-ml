@@ -142,7 +142,10 @@ class TestScheduleSummary:
     def test_summary_keys(self, sample_load_24h, sample_circuit_24h, cfg):
         schedule = run_dispatch(sample_load_24h, sample_circuit_24h, cfg=cfg)
         summary = schedule_summary(schedule)
-        expected_keys = {"total_fuel_kg", "total_carbon_kg", "diesel_hours", "bess_soc_final"}
+        expected_keys = {
+            "total_fuel_kg", "total_carbon_kg", "diesel_hours", 
+            "bess_soc_final", "max_units_active", "step_plan_units"
+        }
         assert set(summary.keys()) == expected_keys
 
     def test_fuel_sum_matches(self, high_deficit_load, low_circuit, cfg):
