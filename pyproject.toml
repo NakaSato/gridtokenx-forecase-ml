@@ -46,3 +46,5 @@ research = [
     "numba>=0.65.1",
     "tqdm>=4.67.3",
 ]
+[tool.vercel]
+entrypoint = "api/index.py"

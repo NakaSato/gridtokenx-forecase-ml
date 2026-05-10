@@ -3,17 +3,22 @@
 
 # Include only what we need
 !api/
+!api/**
 !domain/
+!domain/**
 !infrastructure/
-!models/*.pt
-!models/*.pkl
+!infrastructure/**
+!models/
+!models/tcn.pt
+!models/lgbm.pkl
+!models/meta_learner.pkl
 !config.yaml
 !requirements.txt
 !pyproject.toml
 !vercel.json
 !.python-version
 
-# Exclude large/useless dirs
+# Exclude large/useless dirs (redundant but safe)
 data/
 tests/
 notebooks/
