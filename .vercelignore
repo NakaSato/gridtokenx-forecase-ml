@@ -1,0 +1,35 @@
+# Exclude everything by default
+*
+
+# Include only what we need
+!api/
+!domain/
+!infrastructure/
+!models/*.pt
+!models/*.pkl
+!config.yaml
+!requirements.txt
+!pyproject.toml
+!vercel.json
+!.python-version
+
+# Exclude large/useless dirs
+data/
+tests/
+notebooks/
+research/
+results/
+.git/
+.venv/
+mlruns/
+mlflow.db
+api_state.db
+__pycache__/
+.pytest_cache/
+.vscode/
+AGENT.md
+GEMINI.md
+README.md
+Dockerfile
+docker-compose.yml
+colab-playbook.md

@@ -9,7 +9,6 @@ sqlalchemy==2.0.32
 psycopg2-binary==2.9.9
 pyarrow>=17.0.0
 numpy==1.26.4
-mlflow==2.15.1
 pydantic==2.8.2
 requests==2.32.3
 pandapower==2.14.1
