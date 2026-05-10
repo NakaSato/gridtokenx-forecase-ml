@@ -14,10 +14,6 @@
     {
       "src": "/api/gridtokenx/(.*)",
       "dest": "api/index.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend/$1"
     }
   ]
 }
