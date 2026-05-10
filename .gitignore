@@ -71,3 +71,10 @@ yarn-error.log*
 *.log
 # uv.lock  # Committed by convention for apps, uncomment if this is a library
 api_state.db
+
+# Large GeoJSON Data (over 100MB)
+data/geojson/cleaned/egat_district_load.geojson
+data/geojson/cleaned/egat_combined_load.geojson
+data/geojson/cleaned/egat_gen_zones.geojson
+data/geojson/cleaned/egat_combined_gen.geojson
+
