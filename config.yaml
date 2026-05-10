@@ -92,10 +92,10 @@ model:
     window_size: 192 # 48 hours @ 15-min
     forecast_horizon: 96 # 24 hours @ 15-min
     learning_rate: 0.001
-    epochs: 30
+    epochs: 100
     batch_size: 64
     dropout: 0.2
-
+    early_stopping_patience: 15
 optimizer:
   isca:
     population: 30

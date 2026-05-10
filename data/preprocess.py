@@ -9,6 +9,8 @@ import pandas as pd
 import yaml
 from sklearn.preprocessing import StandardScaler
 from statsmodels.tsa.seasonal import MSTL
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def load_cfg():
     with open("config.yaml") as f:
@@ -45,8 +47,13 @@ def impute_bess_soc(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     if "bess_soc_pct" not in df.columns:
         df["bess_soc_pct"] = 65.0
     
-    # If SoC is constant, it's likely a synthetic placeholder; re-simulate for dynamics
-    if df["bess_soc_pct"].std() < 0.01:
+    # If SoC is constant or nearly-constant (e.g. 65 then all zeros), re-simulate
+    soc_unique = df["bess_soc_pct"].nunique()
+    soc_is_degenerate = (
+        df["bess_soc_pct"].std() < 0.01
+        or (soc_unique <= 2 and (df["bess_soc_pct"] == 0).mean() > 0.95)
+    )
+    if soc_is_degenerate:
         print("  impute_bess_soc: Constant SoC detected. Re-simulating dynamics...")
         n = len(df)
         soc = np.zeros(n)
@@ -93,6 +100,7 @@ def engineer_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     sph = 4 if freq == "15min" else 1
     d = df.copy()
 
+
     # ── 0. Renaming to standard schema ──
     rename_map = {
         "Island_Load_MW": "tao_load_mw",
@@ -127,6 +135,11 @@ def engineer_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
         if "load" in [c.lower() for c in cols]:
             target = next(c for c in cols if c.lower() == "load")
             d = d.rename(columns={target: "tao_load_mw"})
+
+    # ── 1.5. Synthetic Enhancements (Fix for dead code) ──
+    d = impute_bess_soc(d, cfg)
+    if "kmb_flow_mw" in d.columns:
+        d = decompose_kmb(d, sph)
 
     # ── 2. System State ──
     if "capacity_mw" in d.columns:
@@ -209,6 +222,13 @@ def main():
     train = df[df.index <= dc["train_end"]]
     val   = df[(df.index >= dc["val_start"]) & (df.index <= dc["val_end"])]
     test  = df[(df.index >= dc["test_start"]) & (df.index <= dc["test_end"])]
+
+    # ── Schema Validation ──
+    from schema import SEQ_FEATURES, TAB_FEATURES, TARGETS
+    required = set(SEQ_FEATURES + TAB_FEATURES + TARGETS)
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"CRITICAL: Engineered dataframe is missing required features defined in schema.py: {missing}")
 
     print(f"Train: {len(train):,} | Val: {len(val):,} | Test: {len(test):,}")
 
