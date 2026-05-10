@@ -1,9 +1,11 @@
 """
-Hybrid pipeline: LightGBM + TCN → Ridge meta-learner.
-LightGBM predictions are computed in an isolated subprocess to avoid
-the OpenMP conflict between LightGBM and PyTorch on macOS.
+Hybrid pipeline: Multi-Target LightGBM + TCN → Parallel Ridge meta-learners.
 """
 import os, sys, pickle, subprocess, tempfile
+
+ROOT = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, ROOT)
+
 import numpy as np
 import pandas as pd
 import yaml
@@ -16,16 +18,13 @@ from models.mlflow_utils import setup_mlflow
 setup_mlflow()
 mlflow.set_experiment("GridTokenX_Hybrid")
 
-ROOT = os.path.dirname(os.path.dirname(__file__))
-sys.path.insert(0, ROOT)
-
+TARGETS = ["Samui_Load_MW", "Phangan_Load_MW", "Island_Load_MW", "Samui_Circuit_MW"]
 
 def mape(y_true, y_pred):
     return np.mean(np.abs((y_true - y_pred) / (y_true + 1e-8))) * 100
 
-
 def lgbm_predict_subprocess(parquet_path: str, out_path: str):
-    """Run lgbm.predict in a clean subprocess, save result as .npy."""
+    """Run multi-target lgbm.predict in a clean subprocess."""
     script = f"""
 import os, sys, pickle
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -36,7 +35,6 @@ with open("models/lgbm.pkl", "rb") as f:
     model = pickle.load(f)
 df = pd.read_parquet({repr(parquet_path)})
 
-# Handle missing cluster features in real data splits by filling with 0.0
 for col in FEATURES:
     if col not in df.columns:
         df[col] = 0.0
@@ -59,8 +57,9 @@ def get_tcn_preds(ckpt, df, device):
     tc = ckpt["config"]
     dropout = ckpt.get("dropout", 0.0)
     window, horizon = tc["window_size"], tc["forecast_horizon"]
+    n_targets = ckpt.get("n_targets", 4)
     net = TCN(ckpt["in_features"], tc["filters"], tc["kernel_size"],
-              tc["layers"], horizon, dropout=dropout).to(device)
+              tc["layers"], horizon, n_targets=n_targets, dropout=dropout).to(device)
     net.load_state_dict(ckpt["state_dict"])
     net.eval()
     ds = WindowDataset(df, window, horizon)
@@ -69,8 +68,9 @@ def get_tcn_preds(ckpt, df, device):
     with torch.no_grad():
         for xb, _ in dl:
             preds.append(net(xb.to(device)).cpu().numpy())
-    preds = np.concatenate(preds)[:, 0]
-    aligned = np.full(len(df), np.nan)
+    
+    preds = np.concatenate(preds)[:, 0, :] # → (N, n_targets)
+    aligned = np.full((len(df), n_targets), np.nan)
     aligned[window: window + len(preds)] = preds
     return aligned
 
@@ -87,11 +87,8 @@ def main():
     val  = pd.read_parquet("data/processed/val.parquet")
     test = pd.read_parquet("data/processed/test.parquet")
 
-    # LightGBM predictions via isolated subprocess
-    with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as f:
-        val_npy = f.name
-    with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as f:
-        test_npy = f.name
+    with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as f: val_npy = f.name
+    with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as f: test_npy = f.name
 
     print("Running LightGBM predictions (subprocess)...")
     lgbm_predict_subprocess("data/processed/val.parquet",  val_npy)
@@ -99,85 +96,46 @@ def main():
     lgbm_val  = np.load(val_npy)
     lgbm_test = np.load(test_npy)
     os.unlink(val_npy); os.unlink(test_npy)
-    print("LightGBM done.")
 
-    # TCN predictions
     print("Running TCN predictions...")
     tcn_val  = get_tcn_preds(ckpt, val,  device)
     tcn_test = get_tcn_preds(ckpt, test, device)
-    print("TCN done.")
 
-    # Meta-learner
-    def build(lgbm_p, tcn_p):
-        mask = ~np.isnan(tcn_p)
-        return np.column_stack([lgbm_p[mask], tcn_p[mask]]), mask
+    metas = []
+    final_preds_test = np.zeros_like(lgbm_test)
 
-    X_val,  mv = build(lgbm_val,  tcn_val)
-    X_test, mt = build(lgbm_test, tcn_test)
-    y_val  = val["Island_Load_MW"].values[mv]
-    y_test = test["Island_Load_MW"].values[mt]
+    with mlflow.start_run(run_name="hybrid_multi_target"):
+        for i, target in enumerate(TARGETS):
+            print(f"Training meta-learner for {target}...")
+            
+            mask_v = ~np.isnan(tcn_val[:, i])
+            mask_t = ~np.isnan(tcn_test[:, i])
+            
+            X_val = np.column_stack([lgbm_val[mask_v, i], tcn_val[mask_v, i]])
+            X_test = np.column_stack([lgbm_test[mask_t, i], tcn_test[mask_t, i]])
+            y_val = val[target].values[mask_v]
+            y_test = test[target].values[mask_t]
 
-    # Tune Ridge alpha
-    best_a, best_m = 1.0, float("inf")
-    for a in [0.01, 0.1, 1.0, 10.0, 100.0]:
-        m = Ridge(alpha=a)
-        m.fit(X_val, y_val)
-        p = m.predict(X_val)
-        val_m = mape(y_val, p)
-        if val_m < best_m:
-            best_m, best_a = val_m, a
-    
-    print(f"Best Ridge alpha: {best_a} (Val MAPE: {best_m:.4f}%)")
-    meta = Ridge(alpha=best_a)
-    meta.fit(X_val, y_val)
-    preds = meta.predict(X_test)
+            meta = Ridge(alpha=1.0)
+            meta.fit(X_val, y_val)
+            metas.append(meta)
+            
+            p_test = meta.predict(X_test)
+            final_preds_test[mask_t, i] = p_test
+            
+            t_mape = mape(y_test, p_test)
+            mlflow.log_metric(f"test_mape_{target}", t_mape)
+            print(f"  {target:<20} | Test MAPE: {t_mape:.4f}%")
 
-    test_mape = mape(y_test, preds)
-    test_mae  = mean_absolute_error(y_test, preds)
-    test_r2   = r2_score(y_test, preds)
-
-    print(f"\nTest MAPE : {test_mape:.4f}%  (target <10.0%)")
-    print(f"Test MAE  : {test_mae:.4f} MW  (target <0.75)")
-    print(f"Test R²   : {test_r2:.4f}  (target >0.30)")
-
-    # ── Walk-forward 24h backtest (PEA requirement) ───────────────────────────
-    print("\n── Walk-forward 24h Backtest ──")
-    with open(os.path.join(ROOT, "config.yaml")) as f:
-        cfg = yaml.safe_load(f)
-    freq = cfg["data"].get("frequency", "h")
-    sph = 4 if freq == "15min" else 1
-    step_24h = 24 * sph
-
-    wf_mapes = []
-    for start in range(0, len(y_test) - step_24h, step_24h):
-        yt = y_test[start:start + step_24h]
-        yp = preds[start:start + step_24h]
-        if len(yt) == step_24h:
-            wf_mapes.append(mape(yt, yp))
-    backtest_mape = float(np.mean(wf_mapes))
-    print(f"Walk-forward MAPE (24h windows): {backtest_mape:.4f}%  (PEA target ≤10%)")
-    print(f"Windows evaluated: {len(wf_mapes)}")
-    print(f"PASS: {backtest_mape <= 10.0}")
-
-    with mlflow.start_run(run_name="hybrid_train"):
-        mlflow.log_params({"meta_alpha": 1.0})
-        mlflow.log_metrics({
-            "test_mape": test_mape,
-            "test_mae": test_mae,
-            "test_r2": test_r2,
-            "backtest_mape_24h": backtest_mape,
-        })
-        from mlflow.models import infer_signature
-        signature = infer_signature(X_test, preds)
-        input_example = pd.DataFrame(X_test[:5], columns=["lgbm_pred", "tcn_pred"])
-        if not os.environ.get("COLAB_TRAIN"):
-            mlflow.sklearn.log_model(meta, "meta_learner", signature=signature, input_example=input_example)
+        tao_idx = TARGETS.index("Island_Load_MW")
+        tao_mape = mape(test["Island_Load_MW"].values[~np.isnan(tcn_test[:, tao_idx])], 
+                         final_preds_test[~np.isnan(tcn_test[:, tao_idx]), tao_idx])
+        mlflow.log_metric("test_mape_tao", tao_mape)
 
     os.makedirs("models", exist_ok=True)
     with open("models/meta_learner.pkl", "wb") as f:
-        pickle.dump(meta, f)
+        pickle.dump(metas, f)
     print("Saved → models/meta_learner.pkl")
-
 
 if __name__ == "__main__":
     main()

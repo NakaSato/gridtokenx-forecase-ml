@@ -1,7 +1,6 @@
 """
-LightGBM model for tabular/exogenous feature forecasting.
-Input:  data/processed/train.parquet, data/processed/val.parquet
-Output: models/lgbm.pkl
+Multi-Target LightGBM model for tabular/exogenous feature forecasting.
+Targets: Samui Load, Phangan Load, Tao Load, KMB Capacity.
 """
 import os
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -23,63 +22,44 @@ setup_mlflow()
 mlflow.set_experiment("GridTokenX_LGBM")
 
 FEATURES = [
-    # Weather (from TMD forecast — available 72h ahead)
     "Dry_Bulb_Temp", "Rel_Humidity", "Solar_Irradiance", "Heat_Index",
     "Temp_Roll_Mean_3h", "Temp_Roll_Mean_6h",
     "Humid_Roll_Mean_3h", "Humid_Roll_Mean_6h", "Temp_Gradient",
-    # Market/carbon (available from exchange)
     "Carbon_Intensity", "Market_Price",
-    # Tourism proxy (calendar-derived, always available)
     "Tourist_Index", "Is_High_Season",
-    # Calendar (always available)
     "Hour_of_Day", "Day_of_Week",
     "Is_Thai_Holiday", "Is_Songkran",
-    # Load history (from SCADA — always available)
-    "Load_Lag_1h", "Load_Lag_24h", "Load_Lag_168h",
-    "Load_Roll_Mean_3h", "Load_Roll_Std_3h",
-    "Load_Roll_Mean_6h", "Load_Roll_Std_6h",
-    # Grid Dynamics (Stability & Capacity)
+    "Island_Load_MW_Lag_1h", "Island_Load_MW_Lag_24h",
+    "Phangan_Load_MW_Lag_1h", "Phangan_Load_MW_Lag_24h",
+    "Samui_Load_MW_Lag_1h", "Samui_Load_MW_Lag_24h",
+    "Samui_Circuit_MW_Lag_1h", "Samui_Circuit_MW_Lag_24h",
     "Max_Capacity_MW", "Headroom_MW",
-    # Cluster spatial features (Neighbors' load)
-    "Phangan_Load_Lag_1h", "Phangan_Load_Roll_Mean_3h", "Phangan_Load_Roll_Mean_6h",
-    "Samui_Load_Lag_1h", "Samui_Load_Roll_Mean_3h", "Samui_Load_Roll_Mean_6h",
+    "KMB_Trend", "KMB_Seasonal", "KMB_Resid"
 ]
-TARGET = "Island_Load_MW"
+
+TARGETS = ["Samui_Load_MW", "Phangan_Load_MW", "Island_Load_MW", "Samui_Circuit_MW"]
 
 def mape(y_true, y_pred):
-    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+    return np.mean(np.abs((y_true - y_pred) / (y_true + 1e-8))) * 100
 
 def main():
     with open("config.yaml") as f:
         cfg = yaml.safe_load(f)
     lc = cfg["model"]["lgbm"]
     
-    # Override with best hyperparams if available
-    best_path = "results/best_hyperparams.yaml"
-    if os.path.exists(best_path):
-        with open(best_path) as f:
-            best = yaml.safe_load(f)
-            print(f"Loading best hyperparameters from {best_path}...")
-            # Map lgbm_lr -> learning_rate, etc.
-            if "lgbm_lr" in best: lc["learning_rate"] = best["lgbm_lr"]
-            if "lgbm_leaves" in best: lc["num_leaves"] = best["lgbm_leaves"]
-            if "lgbm_l1" in best: lc["lambda_l1"] = best["lgbm_l1"]
-            if "lgbm_l2" in best: lc["lambda_l2"] = best["lgbm_l2"]
-
     train = pd.read_parquet("data/processed/train.parquet")
     val   = pd.read_parquet("data/processed/val.parquet")
 
-    # Handle missing cluster features in real data splits by filling with 0.0
     for col in FEATURES:
-        if col not in train.columns:
-            train[col] = 0.0
-        if col not in val.columns:
-            val[col] = 0.0
+        if col not in train.columns: train[col] = 0.0
+        if col not in val.columns: val[col] = 0.0
 
-    X_tr, y_tr = train[FEATURES], train[TARGET]
-    X_val, y_val = val[FEATURES], val[TARGET]
+    X_tr, y_tr = train[FEATURES], train[TARGETS]
+    X_val, y_val = val[FEATURES], val[TARGETS]
 
-    model = lgb.LGBMRegressor(
+    from sklearn.multioutput import MultiOutputRegressor
+
+    base_model = lgb.LGBMRegressor(
         n_estimators=lc["n_estimators"],
         learning_rate=lc["learning_rate"],
         num_leaves=lc["num_leaves"],
@@ -89,37 +69,28 @@ def main():
         n_jobs=-1,
         random_state=42,
     )
-    with mlflow.start_run(run_name="lgbm_train"):
+    
+    model = MultiOutputRegressor(base_model)
+
+    with mlflow.start_run(run_name="lgbm_multi_target"):
         mlflow.log_params({
+            "targets": TARGETS,
             "n_estimators": lc["n_estimators"],
             "learning_rate": lc["learning_rate"],
-            "num_leaves": lc["num_leaves"],
-            "lambda_l1": lc.get("lambda_l1", 0.0),
-            "lambda_l2": lc.get("lambda_l2", 0.0),
-            "min_child_samples": lc["min_child_samples"],
         })
 
-        model.fit(
-            X_tr, y_tr,
-            eval_set=[(X_val, y_val)],
-            callbacks=[lgb.early_stopping(lc["early_stopping_rounds"], verbose=False),
-                       lgb.log_evaluation(period=100)],
-        )
+        model.fit(X_tr, y_tr)
 
         preds = model.predict(X_val)
-        val_mape = mape(y_val, preds)
-        val_mae  = mean_absolute_error(y_val, preds)
-        val_r2   = r2_score(y_val, preds)
+        
+        for i, target in enumerate(TARGETS):
+            target_mape = mape(y_val[target].values, preds[:, i])
+            mlflow.log_metric(f"val_mape_{target}", target_mape)
+            print(f"Target {target:<20} | Val MAPE: {target_mape:.4f}%")
 
-        mlflow.log_metrics({"val_mape": val_mape, "val_mae": val_mae, "val_r2": val_r2})
-        from mlflow.models import infer_signature
-        signature = infer_signature(X_val, preds)
-        if not os.environ.get("COLAB_TRAIN"):
-            mlflow.sklearn.log_model(model, "lgbm_model", signature=signature, input_example=X_val.iloc[:5])
-
-        print(f"Val MAPE : {val_mape:.4f}%  (target <10.0%)")
-        print(f"Val MAE  : {val_mae:.4f} MW")
-        print(f"Val R²   : {val_r2:.4f}  (target >0.85)")
+        avg_mape = mape(y_val.values, preds)
+        mlflow.log_metric("val_mape_avg", avg_mape)
+        print(f"\nAverage Val MAPE: {avg_mape:.4f}%")
 
     os.makedirs("models", exist_ok=True)
     with open("models/lgbm.pkl", "wb") as f:
