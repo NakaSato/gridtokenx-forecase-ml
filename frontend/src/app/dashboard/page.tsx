@@ -17,6 +17,7 @@ import { usePagination } from '@/hooks/usePagination';
 import { DashboardHeader } from '@/components/dashboard/components/DashboardHeader';
 import { GridControls } from '@/components/dashboard/components/GridControls';
 import { Pagination } from '@/components/dashboard/components/Pagination';
+import { Console } from '@/components/dashboard/components/Console';
 import { GemmaAgent } from '@/components/agent/GemmaAgent';
 
 import { DEFAULT_METER_COUNT, DEFAULT_ITEMS_PER_PAGE_GRID } from '@/lib/constants';

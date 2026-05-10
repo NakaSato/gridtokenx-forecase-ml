@@ -37,6 +37,15 @@ export interface AttackAlert {
 }
 
 export interface GridHealth {
+    // Forecast Metrics
+    mape?: number;
+    mae?: number;
+    rmse?: number;
+    n?: number;
+    error_history?: number[];
+    grid_status?: any;
+
+    // Physical Metrics
     timestamp: string;
     total_loss_mw: number;
     avg_voltage_pu: number;
@@ -189,7 +198,7 @@ export interface P2PCalculateCostResponse {
 // Dashboard and System Types
 // ============================================================================
 
-export type LogType = 'info' | 'success' | 'warning' | 'error' | 'reading';
+export type LogType = 'info' | 'success' | 'warning' | 'error' | 'reading' | 'gemma' | 'milp';
 
 export interface LogEntry {
     timestamp: string;
