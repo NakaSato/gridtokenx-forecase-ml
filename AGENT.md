@@ -12,17 +12,16 @@ Physics-informed AI forecasting and dispatch system for three islanded microgrid
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Language | Python 3.11 (`uv` + venv) |
-| ML | PyTorch (TCN), LightGBM, scikit-learn (Ridge meta-learner) |
-| Hyperparameter search | Optuna |
-| Experiment tracking | MLflow (SQLite backend, `mlflow.db`) |
-| Grid physics | pandapower, PyPSA |
-| API | FastAPI + uvicorn |
-| Task runner | `just` (see `justfile`) |
-| Frontend | Next.js 16, TypeScript, Tailwind CSS 4, Recharts, Leaflet/Mapbox |
-| Containerization | Docker + docker-compose |
+| Layer                 | Technology                                                 |
+| --------------------- | ---------------------------------------------------------- |
+| Language              | Python 3.11 (`uv` + venv)                                  |
+| ML                    | PyTorch (TCN), LightGBM, scikit-learn (Ridge meta-learner) |
+| Hyperparameter search | Optuna                                                     |
+| Experiment tracking   | MLflow (SQLite backend, `mlflow.db`)                       |
+| Grid physics          | pandapower, PyPSA                                          |
+| API                   | FastAPI + uvicorn                                          |
+| Task runner           | `just` (see `justfile`)                                    |
+| Containerization      | Docker + docker-compose                                    |
 
 ---
 
@@ -40,13 +39,12 @@ just eval          # evaluate forecast + dispatch vs PEA targets
 just tune          # Optuna hyperparameter search (default 50 trials)
 just optimize      # Coordinated Cluster MILP optimization (7-day test)
 just api           # start FastAPI on :8000
-just frontend      # start Next.js dashboard on :3000
-just dev           # start full dev stack (API + Frontend concurrently)
+just dev           # start FastAPI in dev mode
 just simulate      # replay test data through live API, print live metrics
 just pea-full      # run full PEA integration + onboarding pipeline
 just pea-onboard   # multi-target calibrate to real PEA SCADA ground truth
 just pea-backtest  # read-only audit on PEA ground truth
-just up / just down # docker-compose up/down (API + frontend + MLflow)
+just up / just down # docker-compose up/down (API + MLflow)
 
 # 2026 Strategy & Commissioning
 just backtest-12m      # 12-month backtest (May 2025 – Apr 2026)
@@ -81,12 +79,14 @@ research/cluster_stress_test.py → MILP verification on Songkran surge window
 ## Data Schema
 
 ### Multi-Target Monitoring
+
 1. **Ko Samui Load** — High volatility, hotel/commercial driven.
 2. **Ko Phangan Load** — Moderate volatility, Songkran/Full Moon spikes.
 3. **Ko Tao Load** — Target load for local diesel commitment.
 4. **KMB 115 kV Remaining Capacity** — MSTL-decomposed bottleneck signal.
 
 Engineered features:
+
 - `Load_Lag_1h/24h` for all islands.
 - `KMB_Trend`, `KMB_Seasonal`, `KMB_Resid` (from MSTL).
 - `Heat_Index`, `Temp_Roll_Mean`, `Temp_Gradient`.
@@ -112,12 +112,12 @@ Khanom (EGAT Slack)
 
 ## Performance Targets (PEA — from config.yaml)
 
-| Metric | Target | 
-|---|---|
-| MAPE | < 10.0% |
-| R² | > 0.85 |
-| MAE | < 0.75 MW |
-| Fuel savings | > 22% |
+| Metric       | Target    |
+| ------------ | --------- |
+| MAPE         | < 10.0%   |
+| R²           | > 0.85    |
+| MAE          | < 0.75 MW |
+| Fuel savings | > 22%     |
 
 ---
 
@@ -137,4 +137,4 @@ just colab-train
 1. **PEA AWS Sandbox Integration** — Onboarding scripts ready (`just pea-full`), pending raw file placement in `data/raw/pea_aws_sandbox`.
 2. **BESS Logic** — Samui BESS currently optimized for KMB bottleneck; Phangan remains vulnerable with zero local generation/storage.
 3. **API Auth** — Missing security layer for production telemetry ingestion.
-stion.
+   stion.

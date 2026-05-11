@@ -1,12 +1,12 @@
-# Graph Report - gridtokenx-forecase-ml  (2026-05-10)
+# Graph Report - gridtokenx-forecase-ml  (2026-05-11)
 
 ## Corpus Check
-- 66 files · ~40,870 words
+- 64 files · ~38,443 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 947 nodes · 1229 edges · 44 communities detected
-- Extraction: 84% EXTRACTED · 16% INFERRED · 0% AMBIGUOUS · INFERRED: 197 edges (avg confidence: 0.72)
+- 963 nodes · 1248 edges · 44 communities detected
+- Extraction: 84% EXTRACTED · 16% INFERRED · 0% AMBIGUOUS · INFERRED: 200 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -91,15 +91,15 @@ Nodes (47): apply_scaler(), backtest(), distribution_check(), lgbm_predict(), lo
 
 ### Community 2 - "Community 2"
 Cohesion: 0.04
-Nodes (16): MeterCard(), getMeterTheme(), useApi(), useLogs(), usePagination(), usePrices(), useWebSocket(), calculateEnergyMW() (+8 more)
+Nodes (38): client(), Tests for api/serve.py — FastAPI endpoint integration tests. Uses TestClient (no, Tests for POST /stream/actual., Tests for POST /stream/actual., Tests for POST /stream/actual., Tests for GET /stream/metrics., Tests for GET /stream/metrics., Tests for GET /stream/metrics. (+30 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.07
-Nodes (40): IslandGrid, Manages full state of a single island microgrid., ActualRequest, AgentActionPlanRequest, AgentExecutiveReportRequest, AgentExplainRequest, AgentForecastNarrativeRequest, AgentGridStatusRequest (+32 more)
+Cohesion: 0.04
+Nodes (16): MeterCard(), getMeterTheme(), useApi(), useLogs(), usePagination(), usePrices(), useWebSocket(), calculateEnergyMW() (+8 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.04
-Nodes (30): client(), Tests for api/serve.py — FastAPI endpoint integration tests. Uses TestClient (no, Tests for POST /stream/actual., Tests for POST /stream/actual., Tests for GET /stream/metrics., Tests for GET /stream/metrics., Tests for POST /warnings., Tests for POST /warnings. (+22 more)
+Cohesion: 0.07
+Nodes (42): IslandGrid, Manages full state of a single island microgrid., ActualRequest, AgentActionPlanRequest, AgentExecutiveReportRequest, AgentExplainRequest, AgentForecastNarrativeRequest, AgentGridStatusRequest (+34 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.06
@@ -118,8 +118,8 @@ Cohesion: 0.06
 Nodes (20): GridDashboard(), MapLegend(), SearchFilterPanel(), useEgatTransmissionData(), useElectricalGridData(), useGridAssets(), useGridStats(), useKoTaoNetwork() (+12 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.06
-Nodes (10): Regression tests for model predictions — ensures trained models produce consiste, Verify the system meets all PEA performance targets., Verify meta_learner.pkl was saved with the current sklearn version., Loading meta_learner.pkl should not produce InconsistentVersionWarning., Verify all required model files exist and are loadable., Verify all required data files exist., TestDataArtifactsExist, TestModelArtifactsExist (+2 more)
+Cohesion: 0.05
+Nodes (14): Regression tests for model predictions — ensures trained models produce consiste, Verify the system meets all PEA performance targets., Verify the system meets all PEA performance targets., Verify meta_learner.pkl was saved with the current sklearn version., Loading meta_learner.pkl should not produce InconsistentVersionWarning., Verify meta_learner.pkl was saved with the current sklearn version., Loading meta_learner.pkl should not produce InconsistentVersionWarning., Verify all required model files exist and are loadable. (+6 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.07
@@ -166,16 +166,16 @@ Cohesion: 0.24
 Nodes (11): get_tcn_preds(), lgbm_predict_subprocess(), main(), mape(), Hybrid pipeline: Multi-Target LightGBM + TCN → Parallel Ridge meta-learners. Ali, Run multi-target lgbm.predict in a clean subprocess., Run lgbm.predict in a clean subprocess, save result as .npy., Core meta-learner training logic. (+3 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.15
-Nodes (2): proxyGET(), proxyPOST()
+Cohesion: 0.23
+Nodes (12): circuit_for_hour(), circuit_forecast_for(), lgbm_features_for(), main(), print_header(), print_row(), Real-Time Simulator — streams test.parquet row-by-row to the API.  Every hour:, Extract all fields required by TelemetryRow from the dataframe row. (+4 more)
 
 ### Community 22 - "Community 22"
 Cohesion: 0.15
 Nodes (2): proxyGET(), proxyPOST()
 
 ### Community 23 - "Community 23"
-Cohesion: 0.29
-Nodes (10): circuit_for_hour(), circuit_forecast_for(), lgbm_features_for(), main(), print_header(), print_row(), Real-Time Simulator — streams test.parquet row-by-row to the API.  Every hour:, 24h circuit capacity forecast starting from pos (96 steps for 15min). (+2 more)
+Cohesion: 0.15
+Nodes (2): proxyGET(), proxyPOST()
 
 ### Community 25 - "Community 25"
 Cohesion: 0.33
@@ -258,11 +258,11 @@ Cohesion: 1.0
 Nodes (1): GridTokenX — Colab GPU Training Script Runs full pipeline: generate → preprocess
 
 ## Knowledge Gaps
-- **226 isolated node(s):** `GridTokenX: Master Training & Backtest Pipeline ================================`, `Evaluation: multi-target hybrid forecast (3-island) + coordinated dispatch. Alig`, `GridTokenX — Colab GPU Training Script Runs full pipeline: generate → preprocess`, `GridTokenX Coordinated Cluster MILP Dispatch ===================================`, `Alternating Direction Method of Multipliers (ADMM)     Ensures sum(p_export) = 0` (+221 more)
+- **242 isolated node(s):** `GridTokenX: Master Training & Backtest Pipeline ================================`, `Evaluation: multi-target hybrid forecast (3-island) + coordinated dispatch. Alig`, `GridTokenX — Colab GPU Training Script Runs full pipeline: generate → preprocess`, `GridTokenX Coordinated Cluster MILP Dispatch ===================================`, `Alternating Direction Method of Multipliers (ADMM)     Ensures sum(p_export) = 0` (+237 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 21`** (13 nodes): `GET()`, `GET()`, `route.ts`, `route.ts`, `route.ts`, `route.ts`, `proxy-utils.ts`, `route.ts`, `proxyGET()`, `proxyPOST()`, `POST()`, `GET()`, `GET()`
+- **Thin community `Community 22`** (13 nodes): `GET()`, `GET()`, `route.ts`, `route.ts`, `route.ts`, `route.ts`, `proxy-utils.ts`, `route.ts`, `proxyGET()`, `proxyPOST()`, `POST()`, `GET()`, `GET()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 22`** (13 nodes): `GET()`, `POST()`, `route.ts`, `route.ts`, `route.ts`, `route.ts`, `proxy-utils.ts`, `route.ts`, `proxyGET()`, `proxyPOST()`, `GET()`, `GET()`, `POST()`
+- **Thin community `Community 23`** (13 nodes): `GET()`, `POST()`, `route.ts`, `route.ts`, `route.ts`, `route.ts`, `proxy-utils.ts`, `route.ts`, `proxyGET()`, `proxyPOST()`, `GET()`, `GET()`, `POST()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 33`** (4 nodes): `fetch_nasa_power()`, `fetch_openmeteo()`, `fetch_public_datasets.py`, `Fetch public weather + solar irradiance data for Ko Tao, Phangan, Samui. Sources`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -288,17 +288,17 @@ Nodes (1): GridTokenX — Colab GPU Training Script Runs full pipeline: generate
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TCN` connect `Community 3` to `Community 9`, `Community 20`, `Community 6`, `Community 1`?**
-  _High betweenness centrality (0.130) - this node is a cross-community bridge._
-- **Why does `tcn_predict()` connect `Community 1` to `Community 3`, `Community 6`?**
-  _High betweenness centrality (0.072) - this node is a cross-community bridge._
-- **Why does `warnings()` connect `Community 5` to `Community 3`?**
-  _High betweenness centrality (0.061) - this node is a cross-community bridge._
+- **Why does `TCN` connect `Community 4` to `Community 9`, `Community 20`, `Community 6`, `Community 1`?**
+  _High betweenness centrality (0.133) - this node is a cross-community bridge._
+- **Why does `tcn_predict()` connect `Community 1` to `Community 4`, `Community 6`?**
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+- **Why does `warnings()` connect `Community 5` to `Community 4`?**
+  _High betweenness centrality (0.060) - this node is a cross-community bridge._
 - **Are the 25 inferred relationships involving `TCN` (e.g. with `TestModelArtifactsExist` and `TestDataArtifactsExist`) actually correct?**
   _`TCN` has 25 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 17 inferred relationships involving `engineer_features()` (e.g. with `.test_lag_features_created()` and `.test_rolling_features_created()`) actually correct?**
   _`engineer_features()` has 17 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 18 inferred relationships involving `run_dispatch()` (e.g. with `main()` and `.test_output_length()`) actually correct?**
+- **Are the 18 inferred relationships involving `run_dispatch()` (e.g. with `.test_output_length()` and `.test_output_types()`) actually correct?**
   _`run_dispatch()` has 18 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 13 inferred relationships involving `IslandGrid` (e.g. with `TelemetryRow` and `TelemetryStreamRequest`) actually correct?**
   _`IslandGrid` has 13 INFERRED edges - model-reasoned connections that need verification._

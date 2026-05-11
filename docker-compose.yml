@@ -52,19 +52,5 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://api:8000
-      - NEXT_PUBLIC_MLFLOW_URL=http://localhost:5000
-    depends_on:
-      - api
-      - mlflow
-    restart: unless-stopped
-
 volumes:
   postgis_data:

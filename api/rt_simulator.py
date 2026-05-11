@@ -46,18 +46,20 @@ def circuit_for_hour(h: int) -> float:
 
 
 def row_to_telemetry(row: pd.Series) -> dict:
-    # 1. Per-location load + weather
-    # 2. System state
-    # 3. Calendar + Market
-    # 4. Critical Lags + Targets
-    # Note: row index in test.parquet is already lowercase after engineer_features
-    res = {}
+    """Extract all fields required by TelemetryRow from the dataframe row."""
     from models.tcn_model import SEQ_FEATURES
+    res = {}
+    
+    # 1-3. Base features (Sequential)
     for f in SEQ_FEATURES:
         res[f] = float(row[f]) if f in row.index else 0.0
     
-    # Explicitly add tao_load_mw (target) which is required by TelemetryRow schema
-    res["tao_load_mw"] = float(row["tao_load_mw"])
+    # 4. Critical Lags + Targets + Decomposition
+    # These are mandatory in TelemetryRow but not all in SEQ_FEATURES
+    extra_fields = ["tao_load_mw", "kmb_trend", "kmb_seasonal", "kmb_resid"]
+    for f in extra_fields:
+        res[f] = float(row[f]) if f in row.index else 0.0
+        
     return res
 
 

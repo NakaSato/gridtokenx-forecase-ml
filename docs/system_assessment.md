@@ -37,9 +37,8 @@
 
 ### Infrastructure
 - FastAPI streaming engine with **SQLite-backed state** (`api_state.db`) — survives API restarts
-- Docker + docker-compose makes deployment reproducible (API + Frontend + MLflow)
+- Docker + docker-compose makes deployment reproducible (API + MLflow)
 - Optuna hyperparameter search is integrated and logged
-- Next.js 16 frontend with TypeScript, Tailwind CSS 4, Recharts, Leaflet/Mapbox
 - pandapower 6-bus model + PyPSA for power flow analysis and OPF
 
 ---

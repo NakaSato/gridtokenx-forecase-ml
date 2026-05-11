@@ -24,8 +24,8 @@ Optimization & Tracking: Uses Optuna for hyperparameter tuning and MLflow for ex
 Python / ML: torch, lightgbm, optuna, mlflow, scikit-learn.
 Power Systems Analysis: pypsa, pandapower (for simulating the electrical grid and ADMM coordination).
 Backend API: FastAPI (api/serve.py) to serve the ML models.
-Frontend: A Next.js/React web app (located in the frontend/ folder) to visualize commissioning dashboards and reports.
 Task Runner: just is used to trigger backtests, stress tests, and training pipelines.
+
 ## Research Objective
 This codebase provides a high-fidelity environment for training and benchmarking predictive AI models for islanded microgrids. It is specifically tuned to solve the **bottleneck congestion** and **diesel efficiency** problems of the Ko Tao-Phangan-Samui cluster.
 

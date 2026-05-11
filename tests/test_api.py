@@ -52,8 +52,8 @@ class TestMetricsEndpoint:
     def test_metrics_contains_forecast(self, client):
         data = client.get("/metrics").json()
         assert "forecast" in data
-        assert "mape" in data["forecast"]
-        assert "r2" in data["forecast"]
+        assert "mape_tao_load_mw" in data["forecast"]
+        assert "r2_tao_load_mw" in data["forecast"]
 
     def test_metrics_contains_targets(self, client):
         data = client.get("/metrics").json()
@@ -76,6 +76,7 @@ class TestStreamTelemetryEndpoint:
             "carbon_intensity": 0.5, "market_price": 4.5,
             "tao_load_mw": 8.5, "tao_load_mw_lag_1h": 8.3,
             "cable_flow_mw_lag_1h": 12.0, "kmb_flow_mw_lag_1h": 10.0,
+            "tao_load_mw_lag_24h": 8.1, "cable_flow_mw_lag_24h": 11.5, "kmb_flow_mw_lag_24h": 9.5,
             "kmb_trend": 8.0, "kmb_seasonal": 0.5, "kmb_resid": 0.0
         }
         row.update(overrides)

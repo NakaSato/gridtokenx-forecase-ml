@@ -59,6 +59,9 @@ class TelemetryRow(BaseModel):
     tao_load_mw_lag_1h: float
     cable_flow_mw_lag_1h: float
     kmb_flow_mw_lag_1h: float
+    tao_load_mw_lag_24h: float
+    cable_flow_mw_lag_24h: float
+    kmb_flow_mw_lag_24h: float
     kmb_trend:        float
     kmb_seasonal:     float
     kmb_resid:        float

@@ -64,14 +64,9 @@ mlflow:
 api:
     {{python}} -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Start frontend (port 3000)
-frontend:
-    cd frontend && npm run dev
-
-# Start full dev stack (API + Frontend)
+# Start forecast API in dev mode (port 8000)
 dev:
-    @echo "🚀 Starting GridTokenX Dev Stack..."
-    (trap 'kill 0' SIGINT; {{python}} -m uvicorn api.main:app --port 8000 --reload & cd frontend && npm run dev)
+    {{python}} -m uvicorn api.main:app --port 8000 --reload
 
 # Stream test data through API and print live RMSE/MAE/MAPE
 simulate rows="200":
@@ -83,11 +78,12 @@ simulate rows="200":
 colab-train:
     tar -czf /tmp/gridtokenx.tar.gz \
         --exclude='.git' --exclude='.venv' --exclude='__pycache__' \
-        --exclude='node_modules' --exclude='frontend' \
-        --exclude='data/raw' \
+        --exclude='node_modules' \
+        --exclude='data/raw' --exclude='data/processed' \
         --exclude='mlruns' \
         --exclude='mlflow_colab.db' \
-        --exclude='models/*.pkl' --exclude='models/*.pt' .
+        --exclude='models/*.pkl' --exclude='models/*.pt' \
+        --exclude='models/checkpoints' .
     colab-cli file upload /tmp/gridtokenx.tar.gz /content/gridtokenx.tar.gz
     colab-cli server run bash -lc \
         'mkdir -p /content/gridtokenx && tar -xzf /content/gridtokenx.tar.gz -C /content/gridtokenx && pip install -q lightgbm torch pandas numpy scikit-learn pyarrow pyyaml mlflow optuna && cd /content/gridtokenx && python research/colab_train.py'
@@ -95,7 +91,7 @@ colab-train:
     mkdir -p /tmp/gridtokenx_dl
     colab-cli server run bash -lc "tar -cz -C /content/gridtokenx models results | base64" > /tmp/artifacts.b64
     # Clean up base64 output (remove any non-base64 lines if colab-cli adds headers)
-    grep -E '^[A-Za-z0-9+/=]+$' /tmp/artifacts.b64 > /tmp/artifacts_clean.b64
+    tr -d '\r' < /tmp/artifacts.b64 | grep -E '^[A-Za-z0-9+/=]+$' > /tmp/artifacts_clean.b64
     base64 -D -i /tmp/artifacts_clean.b64 -o /tmp/artifacts.tar.gz
     tar -xzf /tmp/artifacts.tar.gz -C .
     @echo "✅ Artifacts synced to local models/ and results/"

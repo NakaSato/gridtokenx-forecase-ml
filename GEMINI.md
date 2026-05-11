@@ -31,7 +31,6 @@ The system solves two primary challenges: **bottleneck congestion** (at the main
 - Python 3.11+
 - `uv` for dependency management
 - `just` command runner
-- Node.js (for frontend)
 
 ### Key Commands
 The project uses `just` for most tasks. Run `just` to see all available recipes.
@@ -48,8 +47,7 @@ The project uses `just` for most tasks. Run `just` to see all available recipes.
 | **Tuning** | `just tune` | Run Optuna hyperparameter search (default 50 trials). |
 | **Evaluation** | `just eval` | Benchmark forecast + dispatch vs PEA targets. |
 | **Serving** | `just api` | Start the FastAPI backend (port 8000). |
-| **Frontend** | `just frontend` | Start the Next.js dashboard (port 3000). |
-| **Dev** | `just dev` | Start full dev stack (API + Frontend concurrently). |
+| **Dev** | `just dev` | Start the FastAPI backend in dev mode. |
 | **Simulate** | `just simulate` | Stream test data through API and print live RMSE/MAE/MAPE. |
 | **Optimize** | `just optimize` | Run PEA MILP dispatch optimization (7-day test). |
 | **Onboard** | `just pea-onboard` | Onboard real PEA SCADA data with calibration. |
@@ -86,8 +84,6 @@ The project uses `just` for most tasks. Run `just` to see all available recipes.
 - `models/` — TCN (`tcn_model.py`), LightGBM (`lgbm_model.py`), Hybrid Meta-Learner (`hybrid_pipeline.py`), device detection (`device.py`).
 - `optimizer/` — Dispatch optimization (`dispatch.py`), PEA MILP dispatch (`pea_dispatch_opt.py`), ISCA metaheuristic (`isca.py`), Optuna tuner (`tune.py`), ADMM resilience (`admm_resilience.py`), early warning system (`early_warning.py`).
 - `research/` — Backtest engine, contingency analysis, cluster stress test, Monte Carlo engine, OPF analysis, pandapower/PyPSA grid models, SCADA simulator, sensitivity analysis, grid diagnostics.
-- `frontend/` — Next.js 16 dashboard with pages: Dashboard, Forecast, Map, Meter, Resilience, Topology, VPP, LPC, ADR.
-- `results/` — Evaluation reports and commissioning dashboard plots.
 - `docs/` — Planning docs, PEA SCADA integration guide, validation plan, single-line diagram.
 - `notebooks/` — Jupyter analysis notebook.
 
