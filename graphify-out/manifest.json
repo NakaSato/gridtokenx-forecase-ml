@@ -1,27 +1,63 @@
 {
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/pypsa_model.py": {
+    "mtime": 1778522374.3482475,
+    "hash": "7df5a0e17c43e936581c78dd4ff71d07"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/cascading_failure.py": {
+    "mtime": 1778523712.501067,
+    "hash": "f22e471aa689db13cf474ccebb2863ca"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/optimizer_benchmark.py": {
+    "mtime": 1778532123.3435013,
+    "hash": "ad228a558a6c34ffa4b037ea0704a887"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/pandapower_model.py": {
+    "mtime": 1778522363.1576517,
+    "hash": "0ee4648d2a90164b09c94b94faeb68e1"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/simulate_year.py": {
+    "mtime": 1778517066.1164856,
+    "hash": "e3bf1cb020c2d2fff042ac43dc0017be"
+  },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/pipeline.py": {
     "mtime": 1778426563.743179,
     "hash": "2ec91a7d34e3181425dc0c1232fb6417"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/stress_test.py": {
+    "mtime": 1778521412.4724662,
+    "hash": "5630935b4f7c9cc3f4cf6a66f1262912"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/evaluate.py": {
     "mtime": 1778428897.3021836,
     "hash": "f1a15d4e2e77c07f993179a110639f4b"
   },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/physics_simulation_1y.py": {
+    "mtime": 1778517997.2702513,
+    "hash": "ea2506ad1be90b0a4417df528bbf9974"
+  },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/colab_train.py": {
     "mtime": 1778426563.743238,
     "hash": "312f2ea41973a61f332cfc473cbca78a"
   },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/stochastic_test.py": {
+    "mtime": 1778521422.0014908,
+    "hash": "a2e0f201ffc5225698a60ec5a4e08203"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/research/backtest_pea.py": {
+    "mtime": 1778520210.8149257,
+    "hash": "47abc019fb2c8955e35860267cf3861e"
+  },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/optimizer/pea_dispatch_opt.py": {
-    "mtime": 1778386549.4943326,
-    "hash": "f9530b1779307c26d3308a096b4e5f7e"
+    "mtime": 1778532706.5512779,
+    "hash": "650f83c025baad63aa5bdff7f2103e3c"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/optimizer/admm_resilience.py": {
     "mtime": 1778382727.7518215,
     "hash": "975fe25c75841b312f0a81b87de87906"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/optimizer/isca.py": {
-    "mtime": 1778428755.4413998,
-    "hash": "e4fb58eeb15154185e26873914738871"
+    "mtime": 1778532670.8889625,
+    "hash": "21171447e3df8a4046982d7afa8f9608"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/optimizer/run_optimization.py": {
     "mtime": 1778428764.0189035,
@@ -88,12 +124,12 @@
     "hash": "4384a00dfc55fd77f77fb7aaecfcfd23"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/agent/gemma_client.py": {
-    "mtime": 1778382727.2056077,
-    "hash": "c859292bb2aceb1b892787f5a2c0cc7c"
+    "mtime": 1778523272.2800834,
+    "hash": "52022fe75955eeb1d49bd7fca5eecbdb"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/agent/use_cases.py": {
-    "mtime": 1778382727.2103424,
-    "hash": "296178f042b48a71557a8ba622915e81"
+    "mtime": 1778523267.216267,
+    "hash": "f6030ff69ade6aca3448de334df7929d"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/models/device.py": {
     "mtime": 1778382727.0,
@@ -104,28 +140,32 @@
     "hash": "2459f1098731ab9baf7bcf614651ad6b"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/models/lgbm_model.py": {
-    "mtime": 1778426563.0,
-    "hash": "bb82023b23c33d97c23b6e7da332f152"
+    "mtime": 1778523315.701722,
+    "hash": "4fa44c3225feb165b0e83fc40d7d5c7d"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/models/__init__.py": {
     "mtime": 1778382727.0,
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/models/tcn_model.py": {
-    "mtime": 1778426563.0,
-    "hash": "597de0a148fe1a9be688dbe148d88c75"
+    "mtime": 1778523325.745323,
+    "hash": "b0dd1d95665e36fe338263cba2665f85"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/models/schema.py": {
     "mtime": 1778428958.0,
     "hash": "dba47ec79a4a6cd37fb6cb5dfa35423e"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/models/hybrid_pipeline.py": {
-    "mtime": 1778428511.0,
-    "hash": "b05607a697a7e1434f9c81c610a060cc"
+    "mtime": 1778523303.9636192,
+    "hash": "0007b1306064f291e24c04fa923d98b5"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/results/plot_2026_strategy.py": {
     "mtime": 1778382727.0,
     "hash": "8f91b47970b0f1d0403891ba9e17cddf"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/scripts/deploy.py": {
+    "mtime": 1778523335.2257748,
+    "hash": "158f1bbe44501584ae383edfad4f6af2"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/api/index.py": {
     "mtime": 1778429151.694447,
@@ -135,13 +175,17 @@
     "mtime": 1778382727.2107346,
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/api/physics_simulator.py": {
+    "mtime": 1778522702.668583,
+    "hash": "1d3c0d3b82ef3d61e0d8c1efe78922d0"
+  },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/api/rt_simulator.py": {
-    "mtime": 1778512856.8405056,
-    "hash": "9a18bd8425d998583ce42d91f497341c"
+    "mtime": 1778528779.5244405,
+    "hash": "0197082d613a13108afe2b9ba0cb37d4"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/api/main.py": {
-    "mtime": 1778428554.9474535,
-    "hash": "b46539799f67ed48f35c9d2fd54057ff"
+    "mtime": 1778533112.9548492,
+    "hash": "0417576ab6391e0df0c2b52987760341"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/infrastructure/__init__.py": {
     "mtime": 1778428396.0188246,
@@ -156,8 +200,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/infrastructure/db/streaming_engine.py": {
-    "mtime": 1778428456.8586578,
-    "hash": "871d8bcbc4a1cd89d3c2384d5c58c3c1"
+    "mtime": 1778524236.658863,
+    "hash": "31159227750118bd3135b6af9690dcd5"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/infrastructure/db/__init__.py": {
     "mtime": 1778428396.0188904,
@@ -184,20 +228,24 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/infrastructure/api/routes/stream.py": {
-    "mtime": 1778428525.7123175,
-    "hash": "afbcc5d4995bd362a11ae1d37490b206"
+    "mtime": 1778530873.3718321,
+    "hash": "cb79767a954d2716a2834e1a99f459b3"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/infrastructure/api/routes/agent.py": {
-    "mtime": 1778428540.0148985,
-    "hash": "35a4804e129ef43780bb3cac2b7ebe1b"
+    "mtime": 1778523200.4833617,
+    "hash": "ecc5c72baf633651275d88f68ed2a9bb"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/infrastructure/api/routes/optimizer.py": {
+    "mtime": 1778533161.5246253,
+    "hash": "e012c028cda7aad873cef5c6c42f957a"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/data/fetch_public_datasets.py": {
     "mtime": 1778385472.2272959,
     "hash": "08b41a651e0b12f3da3cdc879152dddb"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/data/generate_dataset.py": {
-    "mtime": 1778385803.0801651,
-    "hash": "7b969e93674366b15e49e851190e9a10"
+    "mtime": 1778544890.852867,
+    "hash": "1fad818e7fbc3bc3eaf9536f3e2ec3f8"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/data/preprocess.py": {
     "mtime": 1778426563.7433624,
@@ -214,6 +262,10 @@
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/data/integrate_raw.py": {
     "mtime": 1778385472.2843559,
     "hash": "503e3d2b6d89a3f14fce11bb58bf05d4"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/data/pipeline.py": {
+    "mtime": 1778544517.0188565,
+    "hash": "861598a4ec5d6be70d86e8cc2dde308f"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/data/calibrate_with_real_data.py": {
     "mtime": 1778385472.226948,
@@ -252,12 +304,12 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/domain/entities.py": {
-    "mtime": 1778458838.6178014,
-    "hash": "91abbb8bcbb98cb398bb02b30a885fab"
+    "mtime": 1778530862.449096,
+    "hash": "5ee14a2e1767155c5a80e129ae1542c1"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/AGENT.md": {
-    "mtime": 1778514004.62296,
-    "hash": "2f86ee45ffbf0056d20ae6946fce6221"
+    "mtime": 1778514295.8951788,
+    "hash": "32f39aecfec6bd24eaa9624595963fe0"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/colab-playbook.md": {
     "mtime": 1778426577.5374706,
@@ -268,12 +320,12 @@
     "hash": "77ad408a2321c129c2236d295b488820"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/config.yaml": {
-    "mtime": 1778409855.230456,
-    "hash": "0ffade1935ab0ae9fcde6b65f1693182"
+    "mtime": 1778532643.5601327,
+    "hash": "5860007b664d1b3c59b9d2a9afbf1de1"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/README.md": {
-    "mtime": 1778513963.9836025,
-    "hash": "998a092344fa2caee37eb747208e5bbf"
+    "mtime": 1778545204.811787,
+    "hash": "dadecbed2f63a3660e8e1f25c222259e"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/docker-compose.yml": {
     "mtime": 1778513978.323874,
@@ -303,6 +355,10 @@
     "mtime": 1778382727.6090913,
     "hash": "e164abc668a58e668c745d924ed96823"
   },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/docs/DATA_PIPELINE.md": {
+    "mtime": 1778545191.2387652,
+    "hash": "edebef45a22decbe612db6de87c44ab6"
+  },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/docs/system_assessment.md": {
     "mtime": 1778514016.1677225,
     "hash": "79e09353bd6fb4d09a904f9fc827eee9"
@@ -312,8 +368,8 @@
     "hash": "f335cb07af21ac1c579308f02d7bb0d6"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/docs/single_line_diagram.txt": {
-    "mtime": 1778412115.401637,
-    "hash": "48479674e8fc945d93551e8e49cd01ac"
+    "mtime": 1778522679.5569336,
+    "hash": "8004dfabe631f6de440cbe0c6b481dde"
   },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/docs/archive/master_goal.md": {
     "mtime": 1778382727.6264348,
@@ -331,8 +387,36 @@
     "mtime": 1778382727.6099803,
     "hash": "1f0fee0b5b6368f238b25b1d5fc6333f"
   },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/mlruns/2/models/m-582337f68c4b4c7899e9d99b23ec27e7/artifacts/python_env.yaml": {
+    "mtime": 1778543355.2860174,
+    "hash": "694b412091ad707e37a8f930550a4ed7"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/mlruns/2/models/m-582337f68c4b4c7899e9d99b23ec27e7/artifacts/requirements.txt": {
+    "mtime": 1778543355.2856724,
+    "hash": "e3a8f4d32dd68731236f206e3f29266f"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/mlruns/2/models/m-582337f68c4b4c7899e9d99b23ec27e7/artifacts/conda.yaml": {
+    "mtime": 1778543355.285459,
+    "hash": "1c7f39a4711f837a7996caeef759cbfb"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/mlruns/2/models/m-c53ab1c45964471490193ddf45975722/artifacts/python_env.yaml": {
+    "mtime": 1778523547.9063904,
+    "hash": "694b412091ad707e37a8f930550a4ed7"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/mlruns/2/models/m-c53ab1c45964471490193ddf45975722/artifacts/requirements.txt": {
+    "mtime": 1778523547.9060152,
+    "hash": "e3a8f4d32dd68731236f206e3f29266f"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/mlruns/2/models/m-c53ab1c45964471490193ddf45975722/artifacts/conda.yaml": {
+    "mtime": 1778523547.9057631,
+    "hash": "1c7f39a4711f837a7996caeef759cbfb"
+  },
   "/Users/chanthawat/Developments/gridtokenx-forecase-ml/results/simulation_report_report.txt": {
-    "mtime": 1778513112.6388023,
-    "hash": "e29c967de5374dfea4ee40d4585cf8a9"
+    "mtime": 1778531658.6953886,
+    "hash": "f67a297e6cc95be5b1f7c31543884b37"
+  },
+  "/Users/chanthawat/Developments/gridtokenx-forecase-ml/results/optimizer_comparison.png": {
+    "mtime": 1778532733.8865786,
+    "hash": "edfb91a2f1eb42438db180b290238252"
   }
 }
