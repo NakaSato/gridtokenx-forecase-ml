@@ -20,23 +20,27 @@ class SQLiteStreamingEngine(IStreamingEngine):
         # Initialize physical grid state
         self.grid = IslandGrid("Ko Tao", cfg)
         
+        from domain.entities import TelemetryRow
+        self.all_fields = list(TelemetryRow.model_fields.keys())
+        
         self._init_db()
         self._load_state()
 
     def _init_db(self):
         with sqlite3.connect(self.db_path) as conn:
-            cols = ", ".join([f"{f} REAL" for f in self.seq_fields])
+            cols = ", ".join([f"{f} REAL" for f in self.all_fields])
             conn.execute(f"CREATE TABLE IF NOT EXISTS telemetry (id INTEGER PRIMARY KEY AUTOINCREMENT, {cols})")
             conn.execute("CREATE TABLE IF NOT EXISTS metrics (id INTEGER PRIMARY KEY AUTOINCREMENT, actual REAL, forecast REAL)")
             conn.commit()
 
     def _load_state(self):
+        from domain.entities import TelemetryRow
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(f"SELECT COUNT(*) FROM telemetry")
             if cursor.fetchone()[0] > 0:
-                rows = conn.execute(f"SELECT {', '.join(self.seq_fields)} FROM (SELECT * FROM telemetry ORDER BY id DESC LIMIT ?) ORDER BY id ASC", (self.window_size,)).fetchall()
+                rows = conn.execute(f"SELECT {', '.join(self.all_fields)} FROM (SELECT * FROM telemetry ORDER BY id DESC LIMIT ?) ORDER BY id ASC", (self.window_size,)).fetchall()
                 for r in rows:
-                    row_obj = TelemetryRow(**dict(zip(self.seq_fields, r)))
+                    row_obj = TelemetryRow(**dict(zip(self.all_fields, r)))
                     self.buffer.append(row_obj)
                     # Sync grid state
                     self.grid.update(row_obj.tao_load_mw, self.cfg["data"]["circuit_cap_max"] - row_obj.headroom_mw)
@@ -55,9 +59,9 @@ class SQLiteStreamingEngine(IStreamingEngine):
         self.grid.update(row.tao_load_mw, cap)
 
         with sqlite3.connect(self.db_path) as conn:
-            vals = [getattr(row, f) for f in self.seq_fields]
-            placeholders = ", ".join(["?"] * len(self.seq_fields))
-            conn.execute(f"INSERT INTO telemetry ({', '.join(self.seq_fields)}) VALUES ({placeholders})", vals)
+            vals = [getattr(row, f) for f in self.all_fields]
+            placeholders = ", ".join(["?"] * len(self.all_fields))
+            conn.execute(f"INSERT INTO telemetry ({', '.join(self.all_fields)}) VALUES ({placeholders})", vals)
             conn.execute("DELETE FROM telemetry WHERE id NOT IN (SELECT id FROM telemetry ORDER BY id DESC LIMIT 2000)")
             conn.commit()
 

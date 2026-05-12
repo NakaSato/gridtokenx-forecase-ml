@@ -2,12 +2,12 @@ from fastapi import APIRouter, HTTPException
 from domain.entities import (
     AgentExplainRequest, AgentActionPlanRequest,
     AgentForecastNarrativeRequest, AgentExecutiveReportRequest,
-    AgentGridStatusRequest
+    AgentGridStatusRequest, AgentWarningExplainRequest
 )
 from agent.use_cases import (
     generate_decision_explanation, generate_action_plan,
     generate_forecast_narrative, generate_executive_report,
-    generate_grid_status_explanation
+    generate_grid_status_explanation, generate_warning_explanation
 )
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -51,3 +51,11 @@ def agent_grid_status(req: AgentGridStatusRequest):
         return {"explanation": explanation}
     except Exception as e:
         raise HTTPException(500, f"Gemma grid status failed: {str(e)}")
+
+@router.post("/explain-warning")
+def agent_explain_warning(req: AgentWarningExplainRequest):
+    try:
+        explanation = generate_warning_explanation(req.warning, req.lookahead_context)
+        return {"explanation": explanation}
+    except Exception as e:
+        raise HTTPException(500, f"Gemma warning explanation failed: {str(e)}")

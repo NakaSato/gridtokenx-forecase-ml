@@ -47,19 +47,13 @@ def circuit_for_hour(h: int) -> float:
 
 def row_to_telemetry(row: pd.Series) -> dict:
     """Extract all fields required by TelemetryRow from the dataframe row."""
-    from models.tcn_model import SEQ_FEATURES
+    from domain.entities import TelemetryRow
     res = {}
-    
-    # 1-3. Base features (Sequential)
-    for f in SEQ_FEATURES:
-        res[f] = float(row[f]) if f in row.index else 0.0
-    
-    # 4. Critical Lags + Targets + Decomposition
-    # These are mandatory in TelemetryRow but not all in SEQ_FEATURES
-    extra_fields = ["tao_load_mw", "kmb_trend", "kmb_seasonal", "kmb_resid"]
-    for f in extra_fields:
-        res[f] = float(row[f]) if f in row.index else 0.0
-        
+    for field_name in TelemetryRow.model_fields:
+        if field_name in row.index:
+            res[field_name] = float(row[field_name])
+        else:
+            res[field_name] = 0.0
     return res
 
 
@@ -211,6 +205,33 @@ def main():
                 grid.get("line_losses_mw")
             ])
             f_csv.flush()
+
+            # --- AI Guidance Block ---
+            if data.get("status") == "forecast" and data.get("summary"):
+                # Get more context for the agent
+                context = {
+                    "trends": {
+                        "tao_load": float(row["tao_load_mw"]),
+                        "forecast": data["forecast_mw"][:6] # Next 6 hours
+                    },
+                    "bess_soc": grid.get("bess", {}).get("soc_pct", 0)
+                }
+                
+                print(f"\n   [AI MONITOR] Detected Warnings:\n   {data['summary']}")
+                
+                try:
+                    agent_resp = requests.post(
+                        f"{API}/agent/explain-warning",
+                        json={
+                            "warning": data["summary"],
+                            "lookahead_context": context
+                        },
+                        timeout=10
+                    )
+                    if agent_resp.status_code == 200:
+                        print(f"   [GEMMA 4 FLASH] {agent_resp.json()['explanation']}\n")
+                except:
+                    pass
 
             if args.speed > 0:
                 time.sleep(args.speed)

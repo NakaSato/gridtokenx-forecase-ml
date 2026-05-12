@@ -118,6 +118,10 @@ class AgentExecutiveReportRequest(BaseModel):
 class AgentGridStatusRequest(BaseModel):
     grid_status: dict
 
+class AgentWarningExplainRequest(BaseModel):
+    warning: str | dict
+    lookahead_context: Optional[dict] = None
+
 @dataclass
 class GridWarning:
     level: str          # "CRITICAL" | "WARNING" | "INFO"

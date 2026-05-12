@@ -79,7 +79,7 @@ def main():
         if i >= window - 1:
             payload["lgbm_features"] = {k: float(row[k]) for k in LGBM_FEATURES if k in row.index}
             # Use capacity from physics or config
-            payload["circuit_forecast"] = [25.0] * (24 * sph)
+            payload["circuit_forecast"] = [16.0] * (24 * sph)
 
         try:
             resp = requests.post(f"{API}/stream/telemetry", json=payload, timeout=30)

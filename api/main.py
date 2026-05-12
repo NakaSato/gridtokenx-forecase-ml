@@ -1,6 +1,6 @@
 import os, json
 from fastapi import FastAPI, HTTPException, Depends
-from infrastructure.api.routes import stream, forecast, agent, grid
+from infrastructure.api.routes import stream, forecast, agent, grid, optimizer
 from infrastructure.api.dependencies import get_predictor_dep, get_streaming_engine_dep
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12,6 +12,7 @@ app.include_router(stream.router)
 app.include_router(forecast.router)
 app.include_router(agent.router)
 app.include_router(grid.router)
+app.include_router(optimizer.router)
 
 @app.get("/health")
 def health(
