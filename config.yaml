@@ -3,11 +3,11 @@ data:
   end_date: "2026-05-02"
   frequency: "15min"
   output_path: "data/processed/island_grid.parquet"
-  # Proposed split strategy
-  train_end: "2026-02-28"
-  val_start: "2026-03-01"
-  val_end: "2026-03-20"
-  test_start: "2025-05-01"
+  # Proposed split strategy (Forward-walking, no overlap)
+  train_end: "2025-10-31"
+  val_start: "2025-11-01"
+  val_end: "2025-11-30"
+  test_start: "2025-12-01"
   test_end: "2026-05-01"
 
   # Thai Holidays (Stress Test Periods)

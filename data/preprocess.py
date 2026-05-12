@@ -17,24 +17,14 @@ def load_cfg():
         return yaml.safe_load(f)
 
 def decompose_kmb(df: pd.DataFrame, sph: int) -> pd.DataFrame:
-    """Apply MSTL decomposition to kmb_flow_mw (Bottleneck)."""
-    print("Decomposing kmb_flow_mw...")
+    """Apply causal naive decomposition to kmb_flow_mw to prevent data leakage."""
+    print("Decomposing kmb_flow_mw (Causal rolling mean)...")
     series = df["kmb_flow_mw"].copy()
     
-    periods = [24 * sph]
-    if len(series) > 168 * sph:
-        periods.append(168 * sph)
-        
-    try:
-        res = MSTL(series, periods=periods).fit()
-        df["kmb_trend"] = res.trend
-        df["kmb_seasonal"] = res.seasonal.sum(axis=1)
-        df["kmb_resid"] = res.resid
-    except Exception as e:
-        print(f"MSTL failed: {e}. Falling back to naive decomposition.")
-        df["kmb_trend"] = series.rolling(24*sph).mean().fillna(method='bfill')
-        df["kmb_seasonal"] = 0.0
-        df["kmb_resid"] = series - df["kmb_trend"]
+    # Strictly causal rolling mean
+    df["kmb_trend"] = series.rolling(24*sph, min_periods=1).mean()
+    df["kmb_seasonal"] = 0.0
+    df["kmb_resid"] = series - df["kmb_trend"]
         
     return df
 

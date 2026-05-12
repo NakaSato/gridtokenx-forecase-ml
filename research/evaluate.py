@@ -55,6 +55,8 @@ np.save({repr(out)}, model.predict(df[FEATURES]))
 
 
 def get_tcn_preds(ckpt, df, device):
+    import joblib
+    import os
     from torch.utils.data import DataLoader
     tc = ckpt["config"]
     window, horizon = tc["window_size"], tc["forecast_horizon"]
@@ -64,12 +66,18 @@ def get_tcn_preds(ckpt, df, device):
               dropout=ckpt.get("dropout", 0.2)).to(device)
     net.load_state_dict(ckpt["state_dict"])
     net.eval()
-    ds = WindowDataset(df, window, horizon)
+    
+    target_scaler = joblib.load("data/processed/target_scaler.pkl") if os.path.exists("data/processed/target_scaler.pkl") else None
+    tcn_scaler = joblib.load("data/processed/tcn_scaler.pkl") if os.path.exists("data/processed/tcn_scaler.pkl") else None
+
+    ds = WindowDataset(df, window, horizon, target_scaler=target_scaler, feature_scaler=tcn_scaler)
     dl = DataLoader(ds, batch_size=256, num_workers=0)
     preds = []
     with torch.no_grad():
         for xb, _ in dl:
-            preds.append(net(xb.to(device)).cpu().numpy())
+            batch_preds = net(xb.to(device))
+            batch_preds = ds.inverse_transform_targets(batch_preds)
+            preds.append(batch_preds)
     
     # preds: (N, horizon, n_targets)
     preds = np.concatenate(preds)[:, 0, :] # Focus on first step

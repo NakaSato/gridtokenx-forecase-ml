@@ -18,7 +18,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from torch.utils.data import DataLoader
 from models.tcn_model import TCN, WindowDataset
-from models.lgbm_model import FEATURES as exog_cols, TARGET as target_col
+from models.schema import TAB_FEATURES as exog_cols, TARGETS, SEQ_FEATURES
 
 import mlflow
 import mlflow.sklearn
@@ -72,12 +72,14 @@ def objective(trial):
     start_time = time.time()
 
     # 3. Train LightGBM
-    lgbm = lgb.LGBMRegressor(
+    from sklearn.multioutput import MultiOutputRegressor
+    base_lgbm = lgb.LGBMRegressor(
         **{k.replace("lgbm_", ""): v for k, v in lgbm_params.items() if k != "verbose"},
         n_jobs=1,
         random_state=42
     )
-    lgbm.fit(train_df[exog_cols], train_df[target_col])
+    lgbm = MultiOutputRegressor(base_lgbm)
+    lgbm.fit(train_df[exog_cols], train_df[TARGETS])
     lgbm_preds = lgbm.predict(val_df[exog_cols])
 
     # 4. Train TCN
@@ -87,13 +89,17 @@ def objective(trial):
     window = cfg["model"]["tcn"]["window_size"]
     horizon = cfg["model"]["tcn"]["forecast_horizon"]
     
-    train_ds = WindowDataset(train_df, window, horizon)
-    val_ds   = WindowDataset(val_df,   window, horizon)
+    import joblib
+    target_scaler = joblib.load("data/processed/target_scaler.pkl") if os.path.exists("data/processed/target_scaler.pkl") else None
+    feature_scaler = joblib.load("data/processed/tcn_scaler.pkl") if os.path.exists("data/processed/tcn_scaler.pkl") else None
+
+    train_ds = WindowDataset(train_df, window, horizon, target_scaler=target_scaler, feature_scaler=feature_scaler)
+    val_ds   = WindowDataset(val_df,   window, horizon, target_scaler=target_scaler, feature_scaler=feature_scaler)
     train_dl = DataLoader(train_ds, batch_size=64, shuffle=True)
     val_dl   = DataLoader(val_ds,   batch_size=64)
 
     model = TCN(len(train_ds.X[0][0]), tcn_params["filters"], tcn_params["kernel_size"],
-                tcn_params["layers"], horizon).to(device)
+                tcn_params["layers"], horizon, n_targets=len(TARGETS)).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=tcn_params["lr"])
     criterion = nn.MSELoss()
 
@@ -109,14 +115,16 @@ def objective(trial):
     tcn_preds_list = []
     with torch.no_grad():
         for xb, _ in val_dl:
-            tcn_preds_list.append(model(xb.to(device)).cpu().numpy())
+            batch_preds = model(xb.to(device))
+            batch_preds = val_ds.inverse_transform_targets(batch_preds)
+            tcn_preds_list.append(batch_preds)
     
-    tcn_preds_raw = np.concatenate(tcn_preds_list)[:, 0]
+    tcn_preds_raw = np.concatenate(tcn_preds_list)[:, 0, 0] # Index 0 for tao_load_mw
     
     # 5. Hybrid Evaluation
     # TCN preds are for indices [window : window + len(tcn_preds_raw)]
     y_true = val_df["tao_load_mw"].values[window : window + len(tcn_preds_raw)]
-    lgbm_preds_aligned = lgbm_preds[window : window + len(tcn_preds_raw)]
+    lgbm_preds_aligned = lgbm_preds[window : window + len(tcn_preds_raw), 0]
     
     hybrid_preds = (lgbm_preds_aligned + tcn_preds_raw) / 2
     
