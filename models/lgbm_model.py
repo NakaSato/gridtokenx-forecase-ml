@@ -81,6 +81,13 @@ def main():
         mlflow.log_metric("val_mape_avg", avg_mape)
         print(f"\nAverage Val MAPE: {avg_mape:.4f}%")
 
+        # Log and Register
+        mlflow.sklearn.log_model(
+            sk_model=model,
+            artifact_path="lgbm_model",
+            registered_model_name="GridTokenX_LGBM"
+        )
+
     os.makedirs("models", exist_ok=True)
     with open("models/lgbm.pkl", "wb") as f:
         pickle.dump(model, f)

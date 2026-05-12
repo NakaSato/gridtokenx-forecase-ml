@@ -126,6 +126,13 @@ def train_meta_learner(val_df: pd.DataFrame, test_df: pd.DataFrame, ckpt: dict, 
             mlflow.log_metric(f"test_mape_{target}", t_mape)
             print(f"  {target:<25} | Test MAPE: {t_mape:.4f}%")
 
+        # 4. Log and Register the Ensemble
+        mlflow.sklearn.log_model(
+            sk_model=metas, 
+            artifact_path="meta_learner",
+            registered_model_name="GridTokenX_MetaLearner"
+        )
+
     return metas
 
 

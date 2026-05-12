@@ -217,6 +217,14 @@ def main():
                 print(f"Early stopping at epoch {epoch}. Best val loss: {best_val:.6f} at epoch {best_epoch}")
                 break
 
+        # Log and Register the Best Model
+        model.load_state_dict(best_state)
+        mlflow.pytorch.log_model(
+            pytorch_model=model,
+            artifact_path="tcn_model",
+            registered_model_name="GridTokenX_TCN"
+        )
+
     model.load_state_dict(best_state)
     os.makedirs("models", exist_ok=True)
     torch.save({"state_dict": best_state,
