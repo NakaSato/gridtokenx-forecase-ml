@@ -55,16 +55,18 @@ bess:
   capacity_mwh: 0 # KO TAO HAS NO BESS
   soc_min: 0.20
   soc_max: 0.80
-  charge_rate_mw: 0.0
+  charge_rate_mw: 8.0
   degradation_per_500_cycles: 0.125
   high_temp_threshold: 45.0
   high_temp_degradation: 0.20
 
 diesel:
+  num_units: 5
+  unit_rating_mw: 2.0
   rated_mw: 10.0
   optimal_load_factor: 0.75
-  optimal_output_mw: 7.5
-  min_load_mw: 2.0
+  optimal_output_mw: 1.5 # 0.75 * 2.0
+  min_load_mw: 0.5 # Per unit
   ramp_rate_mw_per_h: 3.0
   min_up_time_h: 2
   min_down_time_h: 2
