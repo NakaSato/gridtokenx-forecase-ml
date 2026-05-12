@@ -8,7 +8,7 @@ def generate_decision_explanation(optimized_schedule: dict, baseline_schedule: d
     Compares the optimized schedule with the baseline and generates a Thai/English narrative.
     """
     system_prompt = (
-        "You are Gemma 4, an AI operator assistant for the Ko Tao power grid. "
+        "You are Gemma 4 Flash, a state-of-the-art AI operator assistant for the Ko Tao power grid. "
         "Your job is to compare an optimized dispatch schedule against a baseline "
         "and concisely explain the fuel savings in liters and the operational reasons. "
         "Use Thai language for the operator. Use a polite and professional tone."
@@ -37,7 +37,7 @@ def generate_action_plan(incident: dict) -> str:
     sop_context = sop_tool(query=incident.get("message", ""))
     
     system_prompt = (
-        "You are Gemma 4, an AI operator assistant for the Ko Tao power grid. "
+        "You are Gemma 4 Flash, a state-of-the-art AI operator assistant for the Ko Tao power grid. "
         "An early warning incident has been detected. Using the provided SOP context, "
         "generate a strict 3-step actionable plan for the operator. "
         "Translate technical jargon into actionable steps and cite the relevant SOP reference. "
@@ -63,7 +63,7 @@ def generate_forecast_narrative(forecast_mw: list, lgbm_features: dict) -> str:
     Generates a narrative explaining the 24h load forecast, especially focusing on load spikes.
     """
     system_prompt = (
-        "You are Gemma 4, an AI operator assistant for the Ko Tao power grid. "
+        "You are Gemma 4 Flash, a state-of-the-art AI operator assistant for the Ko Tao power grid. "
         "Analyze the provided 24-hour load forecast alongside the current external features (weather, calendar, holidays). "
         "Provide a concise narrative explaining the forecast curve, specifically highlighting why the load might be spiking "
         "(e.g., 'Due to Songkran festival and high heat index, we expect a peak load of X MW...'). "
@@ -89,7 +89,7 @@ def generate_executive_report(backtest_logs: dict) -> str:
     Reads 12-month MILP backtest logs and generates an Executive Summary for proposal inclusion.
     """
     system_prompt = (
-        "You are Gemma 4, an Executive Reporting AI for the GridTokenX predictive intelligence layer. "
+        "You are Gemma 4 Flash, an Executive Reporting AI for the GridTokenX predictive intelligence layer. "
         "Your task is to analyze 12 months of backtest logs and generate a professional, defense-ready "
         "Executive Summary (in markdown format, suitable for PDF/DOCX conversion). "
         "The report must highlight total diesel savings (liters and THB), CO2 emissions avoided, "
@@ -116,10 +116,33 @@ def generate_grid_status_explanation(grid_status: dict) -> str:
     Analyzes current grid stability and headroom.
     """
     system_prompt = (
-        "You are Gemma 4, an AI operator assistant for the Ko Tao power grid. "
+        "You are Gemma 4 Flash, a state-of-the-art AI operator assistant for the Ko Tao power grid. "
         "Analyze the current real-time grid status (headroom, frequency, voltage stability) "
         "and provide a quick status report in Thai. Highlight any immediate risks."
     )
     
     prompt = f"CURRENT GRID STATUS:\n{json.dumps(grid_status, indent=2)}"
+    return gemma_client.generate(prompt=prompt, system_instruction=system_prompt)
+
+
+def generate_warning_explanation(warning: dict, lookahead_context: dict = None) -> str:
+    """
+    Narrates a specific grid warning, explaining the physical root cause and impact.
+    """
+    system_prompt = (
+        "You are Gemma 4 Flash, a state-of-the-art AI operator assistant for the Ko Tao power grid. "
+        "Explain a specific grid alert in a way that helps a human operator understand the risk. "
+        "Identify if it's a BESS depletion risk, a mainland bottleneck, or a voltage stability issue. "
+        "Use Thai language. Be polite but clear about the urgency. Format with bold keywords."
+    )
+    
+    prompt = f"""
+    GRID ALERT:
+    {json.dumps(warning, indent=2)}
+    
+    CONTEXT (Next 24h Trends):
+    {json.dumps(lookahead_context, indent=2) if lookahead_context else "N/A"}
+    
+    Narrate this alert now:
+    """
     return gemma_client.generate(prompt=prompt, system_instruction=system_prompt)

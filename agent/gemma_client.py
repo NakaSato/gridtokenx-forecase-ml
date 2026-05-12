@@ -11,7 +11,7 @@ except ImportError:
     HAS_GENAI = False
 
 class GemmaClient:
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, model_name: str = "gemini-2.0-flash"):
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.model_name = model_name
         self.client = None
@@ -68,7 +68,7 @@ class GemmaClient:
                 "💰 **ผลประโยชน์รายปี:** ประหยัดน้ำมันได้ประมาณ 52,800 ลิตร คิดเป็นมูลค่าประมาณ **1.85 ล้านบาทต่อปี**"
             )
         
-        return "สวัสดีครับ ผมคือ Gemma 4 AI Assistant ประจำระบบ GridTokenX มีอะไรให้ผมช่วยวิเคราะห์ข้อมูลโครงข่ายไฟฟ้าในวันนี้ไหมครับ?"
+        return "สวัสดีครับ ผมคือ Gemma 4 Flash AI Assistant ประจำระบบ GridTokenX มีอะไรให้ผมช่วยวิเคราะห์ข้อมูลโครงข่ายไฟฟ้าในวันนี้ไหมครับ?"
 
 # Singleton instance
 gemma_client = GemmaClient()
