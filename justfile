@@ -23,6 +23,10 @@ generate:
 preprocess:
     {{python}} data/preprocess.py
 
+# Run full data pipeline (Ingestion -> Integration -> Preprocessing)
+data-pipeline *args='':
+    {{python}} data/pipeline.py {{args}}
+
 # ── Training ──────────────────────────────────────────────────────────────────
 
 # Train LightGBM
@@ -38,6 +42,7 @@ hybrid:
     {{python}} models/hybrid_pipeline.py
 
 # Full training pipeline
+# Recommended: just data-pipeline && just lgbm && just tcn && just hybrid
 train: preprocess lgbm tcn hybrid
 
 # ── Evaluation ────────────────────────────────────────────────────────────────
@@ -48,17 +53,42 @@ eval:
 
 # 12-month backtest (May 2025 – Apr 2026)
 backtest-12m:
-    {{python}} research/backtest_pea.py --months 12
+    {{python}} research/backtest_pea.py --months 12 --fast
+
+# Show backtest summary report
+report:
+    @cat results/backtest_pea_report_summary.json
+
+# Generate holistic diagnostic report
+diagnose:
+    {{python}} research/backtest_pea.py --months 1 --fast
+    @cat results/backtest_pea_report_summary.json
 
 # Run Coordinated Cluster MILP dispatch optimization (7-day test)
 optimize:
     {{python}} optimizer/run_optimization.py
+
+# Run PyPSA Optimal Power Flow test
+opf-test:
+    {{python}} research/pypsa_model.py
+
+# Run N-1 Contingency Stress Test (Cable Failure)
+stress-test:
+    {{python}} research/stress_test.py
+
+# Run Stochastic Resilience Test (Monte Carlo)
+stochastic-test:
+    {{python}} research/stochastic_test.py
 
 # ── API ───────────────────────────────────────────────────────────────────────
 
 # Start MLflow server locally (port 5000)
 mlflow:
     mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 0.0.0.0 --port 5000
+
+# Deploy latest Production models from MLflow
+deploy:
+    {{python}} scripts/deploy.py
 
 # Start forecast API (port 8000)
 api:
