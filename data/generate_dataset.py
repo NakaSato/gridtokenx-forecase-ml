@@ -128,7 +128,11 @@ def generate_ko_phangan(idx, dc, bc, rng, assets, global_sim):
     circuit_cap[btl] = rng.uniform(5.0, 15.0, btl.sum())
     circuit_cap = (circuit_cap + rng.normal(0, 0.5, n)).clip(0, 45.0)
 
-    return load, temp, humidity, circuit_cap, _bess_soc(circuit_cap, load, bc, n)
+    # Use island-specific BESS capacity if available
+    island_bc = bc.copy()
+    island_bc["capacity_mwh"] = a.get("bess_mwh", 0.0)
+
+    return load, temp, humidity, circuit_cap, _bess_soc(circuit_cap, load, island_bc, n)
 
 
 def generate_ko_samui(idx, dc, bc, rng, assets, global_sim):
@@ -182,7 +186,11 @@ def generate_ko_samui(idx, dc, bc, rng, assets, global_sim):
     circuit_cap[faults] = rng.uniform(10.0, 20.0, faults.sum())
     circuit_cap = (circuit_cap + rng.normal(0, 1.0, n)).clip(0, 150.0)
 
-    return load, temp, humidity, circuit_cap, _bess_soc(circuit_cap, load, bc, n)
+    # Use island-specific BESS capacity if available
+    island_bc = bc.copy()
+    island_bc["capacity_mwh"] = a.get("bess_mwh", 0.0)
+
+    return load, temp, humidity, circuit_cap, _bess_soc(circuit_cap, load, island_bc, n)
 
 
 def generate(cfg):
@@ -230,9 +238,9 @@ def generate(cfg):
     wind_speed = (4.0 + 2.0 * np.sin(2 * np.pi * (months - 6) / 12) + rng.rayleigh(2.0, n)).clip(0, 25.0)
 
     # Per-island generation
-    tao_load,     tao_temp,     tao_hum,     tao_cap,     tao_soc     = generate_ko_tao(idx, dc, bc, rng, assets, sim)
-    phangan_load, phangan_temp, phangan_hum, phangan_cap, phangan_soc = generate_ko_phangan(idx, dc, bc, rng, assets, sim)
-    samui_load,   samui_temp,   samui_hum,   samui_cap,   samui_soc   = generate_ko_samui(idx, dc, bc, rng, assets, sim)
+    tao_load,     tao_temp,     tao_hum,     tao_cap, tao_soc_gen = generate_ko_tao(idx, dc, bc, rng, assets, sim)
+    phangan_load, phangan_temp, phangan_hum, _, phangan_soc = generate_ko_phangan(idx, dc, bc, rng, assets, sim)
+    samui_load,   samui_temp,   samui_hum,   _, samui_soc   = generate_ko_samui(idx, dc, bc, rng, assets, sim)
 
     # ── Holiday Spikes ──
     # Songkran causes dramatic shifts on tourist islands
@@ -253,9 +261,27 @@ def generate(cfg):
     phangan_load = phangan_load * final_factor
     samui_load   = samui_load * final_factor
 
-    # ── 115 kV NO.3 Cable Stability ──
-    cable_thermal_limit = 1.0 + 0.05 * np.sin(2 * np.pi * (idx.month - 3) / 12)
-    tao_cap = tao_cap * cable_thermal_limit
+    # ── 115 kV Physics-Aware Remaining Capacity ───────────────────────────────
+    # The user described: "upstream demand completely chokes the 115 kV line"
+    temp_factor = (tao_temp - dc["temp_base"]) / (dc["temp_max"] - dc["temp_min"] + 1e-6)
+    mainland_base_limit = 105.0 # MW (Standard 115kV XLPE circuit limit)
+    mainland_limit = mainland_base_limit - (temp_factor * 15.0) 
+    
+    # Total upstream load (Samui + Phangan)
+    upstream_load = samui_load + phangan_load
+    
+    # Remaining capacity for Tao is what's left after upstream islands eat their fill
+    tao_cap = (mainland_limit - upstream_load).clip(0, 16.0) 
+    tao_cap = (tao_cap + rng.normal(0, 0.5, n)).clip(0, 16.0)
+
+    # ── Cumulative Radial Flows (Khanom -> Samui -> Phangan -> Tao) ───────────
+    # Khanom-Samui Flow = Total Cluster Load
+    samui_circuit_mw = samui_load + phangan_load + tao_load
+    # Samui-Phangan Flow = Phangan + Tao Load
+    phangan_circuit_mw = phangan_load + tao_load
+
+    # ── BESS SoC Simulation (Now using physics-aware cap) ────────────────────
+    tao_soc = _bess_soc(tao_cap, tao_load, bc, n)
 
     # Primary output: Ko Tao (model training target)
     df = pd.DataFrame({
@@ -274,11 +300,11 @@ def generate(cfg):
         # Cluster columns
         "Phangan_Load_MW":   phangan_load.round(3),
         "Phangan_Temp":      phangan_temp.round(2),
-        "Phangan_Circuit_MW": phangan_cap.round(2),
+        "Phangan_Circuit_MW": phangan_circuit_mw.round(3),
         "Phangan_SoC_Pct":   (phangan_soc * 100).round(1),
         "Samui_Load_MW":     samui_load.round(3),
         "Samui_Temp":        samui_temp.round(2),
-        "Samui_Circuit_MW":  samui_cap.round(2),
+        "Samui_Circuit_MW":  samui_circuit_mw.round(3),
         "Samui_SoC_Pct":     (samui_soc * 100).round(1),
     }, index=idx)
     df.index.name = "Timestamp"
@@ -293,7 +319,7 @@ def main():
     df.to_parquet(out)
     print(f"Saved {len(df):,} rows → {out}")
     print("\n=== Ko Tao (stable) ===")
-    print(df[["Island_Load_MW", "Dry_Bulb_Temp", "Rel_Humidity"]].describe().round(2))
+    print(df[["Island_Load_MW", "Dry_Bulb_Temp", "Circuit_Cap_MW"]].describe().round(2))
     print("\n=== Ko Phangan (moderate volatility) ===")
     print(df[["Phangan_Load_MW", "Phangan_Circuit_MW"]].describe().round(2))
     print("\n=== Ko Samui (high volatility) ===")
