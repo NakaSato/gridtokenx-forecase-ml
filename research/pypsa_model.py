@@ -15,7 +15,7 @@ def create_pypsa_network():
     n.add("Bus", "Khanom", v_nom=115.0, carrier="AC")
     n.add("Bus", "Samui",  v_nom=115.0, carrier="AC")
     n.add("Bus", "Phangan", v_nom=115.0, carrier="AC")
-    n.add("Bus", "Tao",     v_nom=33.0,  carrier="AC")
+    n.add("Bus", "Tao",     v_nom=22.0,  carrier="AC")
 
     # 2. Add External Grid (Mainland)
     # Marginal cost reflects the price of importing from the mainland
@@ -72,7 +72,7 @@ def create_pypsa_network():
     
     n.add("Link", "Samui BESS Converter",
           bus0="Samui", bus1="Samui BESS Bus",
-          p_nom=10.0,
+          p_nom=8.0, # 8 MW Rating from SLD
           efficiency=0.95)
 
     return n

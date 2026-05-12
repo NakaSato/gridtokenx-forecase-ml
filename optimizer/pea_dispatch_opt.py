@@ -83,14 +83,16 @@ def _build_cluster_milp(
     sph = 4 if freq == "15min" else 1
     dt = 1.0 / sph
 
-    tao_rated = cl["ko_tao"]["diesel_mw"]
+    num_units_tao = dc.get("num_units", 5)
+    unit_rating = dc.get("unit_rating_mw", 2.0)
+    tao_rated = dc["rated_mw"]
     pha_rated = cl["ko_phangan"]["diesel_mw"]
     sam_rated = cl["ko_samui"]["diesel_mw"]
     bess_cap  = bc["capacity_mwh"]
     bess_max  = bc["charge_rate_mw"]
     
     curve = {float(k): v for k, v in dc["bsfc_curve"].items()}
-    f_fix, f_slope = _fit_linear_fuel(tao_rated, curve)
+    f_fix, f_slope = _fit_linear_fuel(unit_rating, curve)
     cost_per_kg = oc["diesel_price_per_kg"] + 2.68 * oc["carbon_price_per_kg"]
     
     c_obj = np.zeros(n)
@@ -114,7 +116,7 @@ def _build_cluster_milp(
     integrality[0:T] = 1; integrality[2*T:3*T] = 1; integrality[4*T:5*T] = 1
 
     lb, ub = np.zeros(n), np.full(n, np.inf)
-    ub[0:T] = 1; ub[T:2*T] = tao_rated
+    ub[0:T] = num_units_tao; ub[T:2*T] = tao_rated
     ub[2*T:3*T] = 1; ub[3*T:4*T] = pha_rated
     ub[4*T:5*T] = 1; ub[5*T:6*T] = sam_rated
     ub[6*T:7*T] = bess_max; ub[7*T:8*T] = bess_max
@@ -146,11 +148,17 @@ def _build_cluster_milp(
         add({P_SP: 1, P_PT: -1, pp: 1}, loads["pha"][h], loads["pha"][h])
         add({P_main: 1, P_SP: -1, ps: 1, pbp: 1, pbn: -1}, loads["sam"][h], loads["sam"][h])
 
-        # Commitment/Capacity Constraints
-        p_min = dc.get("min_load_mw", 2.0)
-        add({pt: 1, ut: -tao_rated}, -np.inf, 0); add({pt: 1, ut: -p_min}, 0, np.inf)
-        add({pp: 1, up: -pha_rated}, -np.inf, 0); add({pp: 1, up: -p_min}, 0, np.inf)
-        add({ps: 1, us: -sam_rated}, -np.inf, 0); add({ps: 1, us: -p_min}, 0, np.inf)
+        # Tao Commitment/Capacity Constraints
+        p_min = dc.get("min_load_mw", 0.5)
+        # P_tao <= units_active * unit_rating
+        add({pt: 1, ut: -unit_rating}, -np.inf, 0)
+        # P_tao >= units_active * p_min
+        add({pt: 1, ut: -p_min}, 0, np.inf)
+
+        # Phangan/Samui Commitment (stay binary for now)
+        p_min_other = 2.0
+        add({pp: 1, up: -pha_rated}, -np.inf, 0); add({pp: 1, up: -p_min_other}, 0, np.inf)
+        add({ps: 1, us: -sam_rated}, -np.inf, 0); add({ps: 1, us: -p_min_other}, 0, np.inf)
 
         # BESS SoC Dynamics
         if h == 0:

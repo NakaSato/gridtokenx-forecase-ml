@@ -30,12 +30,13 @@ class PhysicsEngine:
         b2 = pp.create_bus(net, vn_kv=33.0,  name="Samui MV")
         b3 = pp.create_bus(net, vn_kv=115.0, name="Phangan HV")
         b4 = pp.create_bus(net, vn_kv=33.0,  name="Phangan MV")
-        b5 = pp.create_bus(net, vn_kv=33.0,  name="Ko Tao")
+        b5 = pp.create_bus(net, vn_kv=33.0,  name="Ko Tao 33kV")
+        b6 = pp.create_bus(net, vn_kv=22.0,  name="Ko Tao 22kV")
 
         # 2. Slack (External Grid)
         pp.create_ext_grid(net, bus=b0, vm_pu=1.02, name="Mainland Grid")
 
-        # 3. Transformers (115/33 kV)
+        # 3. Transformers
         pp.create_transformer_from_parameters(
             net, hv_bus=b1, lv_bus=b2, sn_mva=100.0, 
             vn_hv_kv=115.0, vn_lv_kv=33.0, 
@@ -47,6 +48,12 @@ class PhysicsEngine:
             vn_hv_kv=115.0, vn_lv_kv=33.0, 
             vkr_percent=1.0, vk_percent=12.0, pfe_kw=35.0, i0_percent=0.1,
             name="Phangan Main TX"
+        )
+        pp.create_transformer_from_parameters(
+            net, hv_bus=b5, lv_bus=b6, sn_mva=16.0, 
+            vn_hv_kv=33.0, vn_lv_kv=22.0, 
+            vkr_percent=1.2, vk_percent=10.0, pfe_kw=15.0, i0_percent=0.1,
+            name="Tao Distal TX"
         )
 
         # 4. Cables (Submarine)
@@ -66,10 +73,10 @@ class PhysicsEngine:
             max_i_ka=0.3, name="Phangan-Tao 33kV"
         )
 
-        # 5. Loads (Initial)
+        # 5. Loads (Initial) - Tao moved to b6
         pp.create_load(net, bus=b2, p_mw=55.0, q_mvar=17.0, name="Samui Load")
         pp.create_load(net, bus=b4, p_mw=18.0, q_mvar=5.6,  name="Phangan Load")
-        pp.create_load(net, bus=b5, p_mw=7.0,  q_mvar=2.2,  name="Tao Load")
+        pp.create_load(net, bus=b6, p_mw=7.0,  q_mvar=2.2,  name="Tao Load")
 
         return net
 
@@ -88,7 +95,7 @@ class PhysicsEngine:
             pp.runpp(self.net, enforce_q_lims=True)
             
             hvdc_loading = self.net.res_line.at[0, "loading_percent"]
-            v_tao = self.net.res_bus.at[5, "vm_pu"]
+            v_tao = self.net.res_bus.at[6, "vm_pu"]
             
             total_p_gen = self.net.res_ext_grid.p_mw.sum()
             total_p_load = self.net.res_load.p_mw.sum()
@@ -99,7 +106,7 @@ class PhysicsEngine:
                 "bottleneck_loading_pct": float(hvdc_loading),
                 "v_tao_pu": float(v_tao),
                 "line_loss_mw": float(total_losses),
-                "tao_v_kv": float(v_tao * 33.0)
+                "tao_v_kv": float(v_tao * 22.0)
             }
         except Exception as e:
             return {"status": "FAILURE", "error": str(e)}
