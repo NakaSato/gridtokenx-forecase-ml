@@ -138,28 +138,28 @@ graph TD
 ```
 
 ## Training Pipeline
-To reproduce the research benchmarks, execute the following flow:
+To prepare data and reproduce research benchmarks, follow this flow:
 
 ```bash
-# 1. Generate 4-Year Synthetic Research Dataset
-python data/generate_dataset.py
+# 1. Unified Data Pipeline (Generation + Preprocessing + Validation)
+# Supports: --force (synthetic), --real (ERA5), --pea (SCADA)
+just data-pipeline --force
 
-# 2. Preprocess & Feature Engineering
-# (Calculates Heat Index, Lags, and Seasonal Tourist Indices)
-python data/preprocess.py
-
-# 3. Optimize Hyperparameters (Optuna)
+# 2. Optimize Hyperparameters (Optuna)
 # Automates search for filters, kernel sizes, and learning rates
 python optimizer/tune.py
 
-# 4. Train Hybrid Models
+# 3. Train Hybrid Models
 python models/lgbm_model.py
 python models/tcn_model.py
 python models/hybrid_pipeline.py
 
-# 5. Evaluate vs. Real-World Benchmarks
+# 4. Evaluate vs. Real-World Benchmarks
 python research/evaluate.py
 ```
+
+For more details on data sources and integration, see [**Data Pipeline Documentation**](docs/DATA_PIPELINE.md).
+For technical details on optimization, simulation, and resilience tools, see [**PoC Technical Tools Documentation**](docs/TECHNICAL_TOOLS_POC.md).
 
 ## Benchmarking Datasets
 This codebase supports benchmarking against real-world island telemetry:
